@@ -113,7 +113,11 @@ pre.rep{white-space:pre-wrap;background:var(--panel);border:1px solid var(--line
 .tl li{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 .tl .k{font-weight:700}
 .tl .przejecie{background:transparent;border-style:dashed;color:var(--mute)}
-.tl .zrobione{border-left:5px solid var(--green)}.tl .do_zrobienia{border-left:5px solid var(--amber)}
+.tl .zrobione{border-left:5px solid var(--green)}.tl .do_zrobienia{border-left:5px solid var(--amber)}.tl .edycja{border-left:5px solid var(--blue)}
+.contacts{display:grid;gap:2px;font-size:14px}.contacts b{font-weight:600}
+details.box>summary{cursor:pointer;font:700 20px/1.1 'Barlow Condensed',Barlow,sans-serif}
+.chk{display:flex;gap:10px;align-items:center;font-weight:600}.chk input{width:24px;min-height:24px;height:24px;flex:none}
+tr.off td{color:var(--mute)}
 .sim{background:var(--bluebg);border-radius:10px;padding:10px 12px;font-size:15px}
 .x{justify-self:end}
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--bar);color:#fff;padding:12px 18px;border-radius:10px;z-index:40;font-weight:600}
@@ -144,8 +148,9 @@ table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-bl
     <a href="#tablica" data-v="tablica">Tablica</a>
     <a href="#historia" data-v="historia">Historia</a>
     <a href="#raport" data-v="raport">Raport zmiany</a>
+    <a href="#linie" data-v="linie">Linie</a>
   </nav>
-  <button class="btn red hide-tv" id="bNew">+ Nowy priorytet</button>
+  <button class="btn red hide-tv" id="bNew" hidden>+ Nowy priorytet</button>
   <button class="btn hide-tv" id="bTv">Tryb TV</button>
   <button class="who hide-tv" id="bWho"></button>
   <button class="btn tvexit" id="bTvExit">Wyjdź z trybu TV</button>
@@ -177,6 +182,18 @@ table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-bl
   <pre class="rep" id="rtxt"></pre>
 </div></section>
 
+<section class="view" id="v-linie"><div class="band">
+  <h1 style="font-size:36px">Linie</h1>
+  <p class="meta">Sektor i osoby odpowiedzialne za linię – do szybkiego kontaktu w razie problemu. Zmieniać mogą tylko liderzy.</p>
+  <p class="box warn" id="lMiss" hidden>Tabela linii nie istnieje jeszcze w bazie. Uruchom w Supabase plik <b>migrations/003_linie.sql</b> (SQL Editor → New query → Run).</p>
+  <div class="row" id="lTools" hidden><button class="btn red" id="lAdd">+ Dodaj linię</button><button class="btn" id="lPaste">Wklej listę z Excela</button></div>
+  <div class="filters">
+    <input id="lq" type="search" placeholder="Szukaj: linia, sektor, osoba…">
+    <select id="la"><option value="a">Aktywne</option><option value="">Wszystkie</option><option value="n">Nieaktywne</option></select>
+  </div>
+  <div class="scroll"><table class="stack"><thead><tr><th>Linia</th><th>Sektor</th><th>Kierownik sektora</th><th>Technolog</th><th>Automatyk</th><th>Dział NJ</th><th>Otwarte</th></tr></thead><tbody id="ltb"></tbody></table></div>
+</div></section>
+
 <div class="ov" id="drawer" hidden><div class="dr" id="dr"></div></div>
 <div class="ov" id="modal" hidden><div class="dlg" id="dlg"></div></div>
 
@@ -186,13 +203,14 @@ table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-bl
 const CONFIG={
   SUPABASE_URL:'',        // np. 'https://abcd1234.supabase.co'  (puste = tryb demonstracyjny)
   SUPABASE_ANON_KEY:'',   // klucz "anon public" z Supabase -> Project Settings -> API
-  LINES:['A30','F08','K40','F15a','C32','N02','N16'],
-  LEADER_PIN:'1234',      // PIN osób uprawnionych do dodawania priorytetów
   STALE_HOURS:8           // po ilu godzinach bez wpisu karta robi się czerwona
 };
+// Linie są w bazie (tabela lines, zakładka "Linie"). Liderzy mają własne konta (tabela user_roles).
 const PRIO={W:{l:'Wysoki',c:'var(--red)'},S:{l:'Średni',c:'var(--amber)'},N:{l:'Niski',c:'var(--blue)'}};
 const STATUS={nowe:'Nowe',w_trakcie:'W trakcie',czeka_czesc:'Czeka na część',czeka_postoj:'Czeka na postój',rozwiazane:'Rozwiązane'};
-const KIND={utworzenie:'Zgłoszono',komentarz:'Komentarz',zrobione:'Zrobione',do_zrobienia:'Do zrobienia',status:'Zmiana statusu',przejecie:'Przejęto'};
+const KIND={utworzenie:'Zgłoszono',komentarz:'Komentarz',zrobione:'Zrobione',do_zrobienia:'Do zrobienia',status:'Zmiana statusu',przejecie:'Przejęto',edycja:'Zmiana danych (lider)'};
+const NOT_WORK=['przejecie','edycja'];   // te wpisy nie liczą się jako "działanie" przy maszynie
+const LCOLS=[['code','Linia'],['sector','Sektor'],['sector_manager','Kierownik sektora'],['technologist','Technolog'],['automation','Automatyk'],['nj_contact','Dział NJ']];
 const ROMAN=['','I','II','III'],HOURS=['','06:00–14:00','14:00–22:00','22:00–06:00'];
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -207,14 +225,37 @@ const iso=t=>new Date(t).toISOString();
 
 function shiftAt(t){const d=new Date(t),h=d.getHours(),s=new Date(d);let n;
   if(h>=6&&h<14){n=1;s.setHours(6,0,0,0)}else if(h>=14&&h<22){n=2;s.setHours(14,0,0,0)}else{n=3;if(h<6)s.setDate(s.getDate()-1);s.setHours(22,0,0,0)}
-  return{n,start:s,end:new Date(s.getTime()+8*36e5),key:ymd(s)+'-Z'+n,label:ROMAN[n]}}
+  const e=new Date(s);e.setHours(s.getHours()+8);   // poprawnie także w noc zmiany czasu (7 lub 9 h)
+  return{n,start:s,end:e,key:ymd(s)+'-Z'+n,label:ROMAN[n]}}
 const prevShift=s=>shiftAt(s.start.getTime()-6e4);
 
-let DB={issues:[],entries:[]},store,curId=null,view='tablica',rep=0;
-const myName=()=>ls.get('tablica_ur_name')||'';
-let leader=ls.get('tablica_ur_leader')==='1';
+let DB={issues:[],entries:[],lines:[]},store,curId=null,view='tablica',rep=0;
+let ME={role:null,name:'',email:''};          // rola z tabeli user_roles
+let SYNC={ok:false,at:0,err:''};               // stan połączenia z bazą
+const isLeader=()=>!!ME.role;
+const myName=()=>isLeader()&&ME.name?ME.name:(ls.get('tablica_ur_name')||'');
+const byCode=(a,b)=>a.code.localeCompare(b.code,'pl',{numeric:true,sensitivity:'base'});
+const lineOf=code=>DB.lines.find(l=>l.code===code);
+const findLine=v=>{v=String(v||'').trim().toLowerCase();return DB.lines.find(l=>l.code.toLowerCase()===v)};
+const activeLines=()=>DB.lines.filter(l=>l.active!==false).sort(byCode);
+function describeEdit(i,p){const ch=[];   // to samo robi trigger w bazie (migracja 002)
+  if('priority'in p&&p.priority!==i.priority)ch.push(`Priorytet: ${PRIO[i.priority]?.l} → ${PRIO[p.priority]?.l}`);
+  if('line'in p&&p.line!==i.line)ch.push(`Linia: ${i.line} → ${p.line}`);
+  if('title'in p&&p.title!==i.title)ch.push(`Problem: ${p.title}`);
+  if('lds'in p&&(p.lds||'')!==(i.lds||''))ch.push(`LDS: ${p.lds||'usunięto'}`);
+  if('description'in p&&(p.description||'')!==(i.description||''))ch.push('Zmieniono opis');
+  return ch.join('; ')}
 
 /* ===== Dane przykładowe (tryb demo) ===== */
+const seedLines=()=>[
+  ['A30','Sektor 1 – Montaż','A. Kamińska','T. Lewandowski','R. Dąbrowski','E. Szymańska'],
+  ['F08','Sektor 2 – Zgrzewanie','B. Wójcik','T. Lewandowski','R. Dąbrowski',''],
+  ['K40','Sektor 3 – Robotyzacja','B. Wójcik','M. Kaczmarek','S. Piotrowski',''],
+  ['F15a','Sektor 2 – Zgrzewanie','B. Wójcik','','',''],
+  ['C32','Sektor 1 – Montaż','A. Kamińska','M. Kaczmarek','',''],
+  ['N02','Sektor 4 – Prasy','C. Zając','','S. Piotrowski',''],
+  ['N16','Sektor 4 – Prasy','C. Zając','','','']
+].map(r=>({...Object.fromEntries(LCOLS.map(([k],n)=>[k,r[n]||''])),notes:'',active:true}));
 function seed(){
   const now=Date.now(),c=shiftAt(now),p1=prevShift(c),p2=prevShift(p1),p3=prevShift(p2);
   const T=(sh,min)=>Math.min(sh.start.getTime()+min*6e4,now-6e4),D=d=>now-d*864e5;
@@ -253,46 +294,81 @@ function seed(){
    [['utworzenie',t,'J. Wiśniewski','Detale spadają przy odkładaniu.'],['zrobione',t+19*36e5,'A. Zielińska','Wymieniono przyssawki chwytaka i filtr podciśnienia, podciśnienie wróciło do normy.','rozwiazane']]);
   t=D(19);iss({line:'A30',priority:'W',status:'rozwiazane',title:'Przenośnik – zerwany pas',created_by:'K. Mazur',created_at:t,closed_at:iso(t+5*36e5)},
    [['utworzenie',t,'K. Mazur',''],['zrobione',t+5*36e5,'P. Nowak','Wymieniono pas 1200 mm, naciąg wg instrukcji, test OK.','rozwiazane']]);
-  DB={issues:I,entries:E};
+  DB={issues:I,entries:E,lines:seedLines()};
 }
 
-/* ===== Magazyn danych: demo (przeglądarka) albo Supabase ===== */
+/* ===== Magazyn danych: demo (przeglądarka) albo Supabase =====
+   Tryb demo naśladuje triggery z migracji 002: wpis "utworzenie", status z wpisu, wpis "edycja". */
 const LSKEY='tablica_ur_demo_v1';
 const demo={
-  async init(){const raw=ls.get(LSKEY);if(raw){try{DB=JSON.parse(raw)}catch(e){seed()}}else{seed();this.save()}
+  async init(){const raw=ls.get(LSKEY);if(raw){try{DB=JSON.parse(raw)}catch(e){seed()}}else seed();
+    if(!Array.isArray(DB.lines))DB.lines=seedLines();this.save();
+    if(ls.get('tablica_ur_demo_leader')==='1')ME={role:'lider',name:'Lider (demo)',email:''};
     addEventListener('storage',e=>{if(e.key===LSKEY&&e.newValue){try{DB=JSON.parse(e.newValue);render()}catch(_){}}})},
-  save(){ls.set(LSKEY,JSON.stringify(DB))},
-  async addIssue(o){DB.issues.push(o);this.save()},
-  async updIssue(id,p){Object.assign(DB.issues.find(i=>i.id===id),p);this.save()},
-  async addEntry(e){DB.entries.push(e);this.save()}
+  save(){ls.set(LSKEY,JSON.stringify(DB));SYNC={ok:true,at:Date.now(),err:''}},
+  _entry(e){const t=Date.now();DB.entries.push({id:uid(),text:'',status:null,...e,created_at:iso(t),shift_key:shiftAt(t).key})},
+  async createIssue(o){if(!isLeader())throw new Error('brak uprawnień');
+    const i={id:uid(),status:'nowe',description:'',lds:'',...o,created_at:iso(Date.now()),closed_at:null};
+    DB.issues.push(i);this._entry({issue_id:i.id,kind:'utworzenie',author:i.created_by,text:i.description});this.save()},
+  async addEntry(e){const i=DB.issues.find(x=>x.id===e.issue_id);this._entry(e);
+    if(i&&e.status&&e.status!==i.status){i.status=e.status;i.closed_at=e.status==='rozwiazane'?iso(Date.now()):null}this.save()},
+  async editIssue(id,p){if(!isLeader())throw new Error('brak uprawnień');
+    const i=DB.issues.find(x=>x.id===id),t=describeEdit(i,p);Object.assign(i,p);if(t)this._entry({issue_id:id,kind:'edycja',author:myName(),text:t});this.save()},
+  async saveLines(arr){if(!isLeader())throw new Error('brak uprawnień');
+    arr.forEach(l=>{const x=DB.lines.find(y=>y.code===l.code);if(x)Object.assign(x,l);else DB.lines.push({notes:'',active:true,...l})});this.save()},
+  async signOut(){}
 };
-const loadScript=src=>new Promise((ok,no)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=no;document.head.appendChild(s)});
+const loadScript=src=>new Promise((ok,no)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=()=>no(new Error('nie można pobrać biblioteki Supabase'));document.head.appendChild(s)});
 const remote={
-  sb:null,t:0,
+  sb:null,t:0,missing:{},loggingIn:false,
   async init(){
     await loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js');
     this.sb=window.supabase.createClient(CONFIG.SUPABASE_URL,CONFIG.SUPABASE_ANON_KEY);
     const {data}=await this.sb.auth.getSession();
     if(!data.session)await loginDialog(this.sb);
-    await this.reload();
-    this.sb.channel('tablica').on('postgres_changes',{event:'*',schema:'public',table:'issues'},()=>this.soon())
-      .on('postgres_changes',{event:'*',schema:'public',table:'entries'},()=>this.soon()).subscribe();
-    setInterval(()=>this.soon(),5*6e4);
+    await this.afterLogin();
+    this.sb.auth.onAuthStateChange(ev=>{if(ev==='SIGNED_OUT')setTimeout(()=>this.relogin(),0)});
+    this.sb.channel('tablica')
+      .on('postgres_changes',{event:'*',schema:'public',table:'issues'},()=>this.soon())
+      .on('postgres_changes',{event:'*',schema:'public',table:'entries'},()=>this.soon())
+      .subscribe(st=>{if(st==='SUBSCRIBED')this.soon()});   // po ponownym połączeniu dociągnij to, co umknęło
+    this.sb.channel('tablica-linie').on('postgres_changes',{event:'*',schema:'public',table:'lines'},()=>this.soon()).subscribe();
+    setInterval(()=>this.soon(),3*6e4);
   },
+  async relogin(){if(this.loggingIn)return;this.loggingIn=true;
+    ME={role:null,name:'',email:''};DB={issues:[],entries:[],lines:[]};SYNC={ok:false,at:0,err:''};closeDrawer();render();
+    await loginDialog(this.sb);this.loggingIn=false;await this.afterLogin();render()},
+  async afterLogin(){await this.loadRole();await this.reload()},
+  async loadRole(){ME={role:null,name:'',email:''};
+    const {data}=await this.sb.auth.getUser();const u=data?.user;if(!u)return;ME.email=u.email||'';
+    const r=await this.sb.from('user_roles').select('role,display_name').eq('user_id',u.id).maybeSingle();
+    if(r.data){ME.role=r.data.role;ME.name=r.data.display_name}},
   soon(){clearTimeout(this.t);this.t=setTimeout(()=>this.reload().then(render),400)},
-  async reload(){const [a,b]=await Promise.all([this.sb.from('issues').select('*'),this.sb.from('entries').select('*').order('created_at')]);
-    if(a.error||b.error){toast('Brak połączenia z bazą – spróbuję ponownie');return}DB={issues:a.data,entries:b.data}},
-  async addIssue(o){const r=await this.sb.from('issues').insert(o);if(r.error)throw r.error},
-  async updIssue(id,p){const r=await this.sb.from('issues').update(p).eq('id',id);if(r.error)throw r.error},
-  async addEntry(e){const r=await this.sb.from('entries').insert(e);if(r.error)throw r.error}
+  // Supabase oddaje maks. 1000 wierszy naraz – pobieramy porcjami, aż do końca
+  async all(table,col){const out=[];
+    for(let a=0;;){let q=this.sb.from(table).select('*').order(col);if(col!=='code')q=q.order('id');
+      const r=await q.range(a,a+999);if(r.error)throw r.error;if(!r.data.length)break;out.push(...r.data);a+=r.data.length}
+    return out},
+  async reload(){try{
+      const ln=this.all('lines','code').then(x=>{this.missing.lines=false;return x},e=>{
+        if(e.code==='42P01'||e.code==='PGRST205'||/does not exist|schema cache/i.test(e.message||'')){this.missing.lines=true;return null}throw e});
+      const [issues,entries,lines]=await Promise.all([this.all('issues','created_at'),this.all('entries','created_at'),ln]);
+      DB={issues,entries,lines:lines||[...new Set(issues.map(i=>i.line))].map(code=>({code,sector:'',active:true}))};
+      SYNC={ok:true,at:Date.now(),err:''};
+    }catch(e){SYNC.ok=false;SYNC.err=e.message||String(e);toast('Brak połączenia z bazą – spróbuję ponownie')}},
+  async createIssue(o){const r=await this.sb.from('issues').insert({id:uid(),status:'nowe',...o});if(r.error)throw r.error},
+  async addEntry(e){const r=await this.sb.from('entries').insert({id:uid(),...e});if(r.error)throw r.error},
+  async editIssue(id,p){const r=await this.sb.from('issues').update(p).eq('id',id).select('id');if(r.error)throw r.error;if(!r.data?.length)throw new Error('brak uprawnień')},
+  async saveLines(arr){const r=await this.sb.from('lines').upsert(arr,{onConflict:'code'});if(r.error)throw r.error},
+  async signOut(){await this.sb.auth.signOut()}
 };
 function loginDialog(sb){return new Promise(ok=>{
-  modal(`<h2>Logowanie</h2><p class="meta">Wspólne konto działu UR.</p>
+  modal(`<h2>Logowanie</h2><p class="meta">Mechanicy: wspólne konto działu UR. Liderzy: własne konto.</p>
   <form id="lf" class="box"><label class="fl">E-mail<input name="e" type="email" required autocomplete="username"></label>
   <label class="fl">Hasło<input name="p" type="password" required autocomplete="current-password"></label>
   <p class="hint" id="lerr"></p><button class="btn red">Zaloguj</button></form>`,true);
   $('#lf').onsubmit=async ev=>{ev.preventDefault();const f=ev.target;
-    const {error}=await sb.auth.signInWithPassword({email:f.e.value,password:f.p.value});
+    const {error}=await sb.auth.signInWithPassword({email:f.e.value.trim(),password:f.p.value});
     if(error){$('#lerr').textContent='Nie udało się zalogować: '+error.message;return}closeModal();ok()}})}
 
 /* ===== Logika zmian ===== */
@@ -301,8 +377,8 @@ function info(i,cur){
   const open=i.status!=='rozwiazane';
   const ackBy=es.find(e=>e.kind==='przejecie'&&e.shift_key===cur.key);
   const acked=new Date(i.created_at)>=cur.start||!!ackBy;
-  const acts=es.filter(e=>e.kind!=='przejecie'),last=acts[acts.length-1];
-  const idle=last?(Date.now()-new Date(last.created_at))/36e5:0;
+  const acts=es.filter(e=>!NOT_WORK.includes(e.kind)),last=acts[acts.length-1];
+  const idle=(Date.now()-new Date(last?last.created_at:i.created_at))/36e5;   // brak wpisów = liczymy od zgłoszenia
   const todo=[...es].reverse().find(e=>e.kind==='do_zrobienia');
   return{es,open,ackBy,needsAck:open&&!acked,stale:open&&idle>=CONFIG.STALE_HOURS,idle,last,todo};
 }
@@ -322,18 +398,22 @@ function card(i,v,cur){
 }
 function renderBoard(){
   const cur=shiftAt(Date.now());
+  // Brak połączenia albo dane starsze niż 12 min: wyraźny czerwony komunikat zamiast "wszystko OK"
+  const bad=store===remote&&(!SYNC.ok||Date.now()-SYNC.at>12*6e4);
+  const conn=bad?`<span class="pill r"><b>!</b> Brak połączenia z bazą – ${SYNC.at?'dane z godz. '+fhm(SYNC.at)+', mogą być nieaktualne':'brak danych'}</span>`:'';
+  $('#foot').innerHTML=store===demo?`<span>Tryb demonstracyjny – przykładowe dane, zapisywane tylko w tej przeglądarce.</span><button class="btn" id="bReset">Przywróć dane przykładowe</button>`:'';
+  const r=$('#bReset');if(r)r.onclick=()=>{seed();demo.save();render();toast('Przywrócono dane przykładowe')};
+  if(store===remote&&!SYNC.at){$('#alerts').innerHTML=conn;$('#board').innerHTML='';$('#done24').innerHTML='';return}
   const open=DB.issues.filter(i=>i.status!=='rozwiazane').map(i=>({i,v:info(i,cur)}));
   const nA=open.filter(x=>x.v.needsAck).length,nS=open.filter(x=>x.v.stale).length;
-  $('#alerts').innerHTML=`<span class="pill"><b>${open.length}</b> otwartych priorytetów</span>`+
-    (nA?`<span class="pill a"><b>${nA}</b> czeka na przejęcie przez zmianę ${cur.label}</span>`:`<span class="pill g">Wszystkie priorytety przejęte przez zmianę ${cur.label}</span>`)+
+  $('#alerts').innerHTML=conn+`<span class="pill"><b>${open.length}</b> otwartych priorytetów</span>`+
+    (nA?`<span class="pill a"><b>${nA}</b> czeka na przejęcie przez zmianę ${cur.label}</span>`:(bad?'':`<span class="pill g">Wszystkie priorytety przejęte przez zmianę ${cur.label}</span>`))+
     (nS?`<span class="pill r"><b>${nS}</b> bez działań od ponad ${CONFIG.STALE_HOURS} h</span>`:'');
   $('#board').innerHTML=['W','S','N'].map(k=>{
     const xs=open.filter(x=>x.i.priority===k).sort((a,b)=>(b.v.stale+b.v.needsAck)-(a.v.stale+a.v.needsAck)||new Date(a.i.created_at)-new Date(b.i.created_at));
     return`<div class="col"><div class="colh" style="--c:${PRIO[k].c}">${PRIO[k].l}<small>${xs.length}</small></div>${xs.length?xs.map(x=>card(x.i,x.v,cur)).join(''):'<div class="empty">Brak</div>'}</div>`}).join('');
   const d24=DB.issues.filter(i=>i.status==='rozwiazane'&&i.closed_at&&Date.now()-new Date(i.closed_at)<864e5);
   $('#done24').innerHTML=d24.length?`<h3>Rozwiązane w ostatnich 24 h</h3>`+d24.map(i=>`<button data-id="${esc(i.id)}"><span class="pill g"><b>${esc(i.line)}</b> ${esc(i.title)}</span></button>`).join(''):'';
-  $('#foot').innerHTML=store===demo?`<span>Tryb demonstracyjny – przykładowe dane, zapisywane tylko w tej przeglądarce.</span><button class="btn" id="bReset">Przywróć dane przykładowe</button>`:'';
-  const r=$('#bReset');if(r)r.onclick=()=>{seed();demo.save();render();toast('Przywrócono dane przykładowe')};
 }
 
 /* ===== Szczegóły awarii ===== */
@@ -346,64 +426,144 @@ function similar(i){
 }
 const micSvg='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
 const voice=(name,ph,req)=>`<div class="voice"><textarea name="${name}" placeholder="${ph}"${req?' required':''}></textarea><button type="button" class="mic" aria-label="Notatka głosowa">${micSvg}</button><p class="hint"></p></div>`;
-const nameField=()=>`<label class="fl">Twoje imię i nazwisko<input name="who" required value="${esc(myName())}" autocomplete="name"></label>`;
+const nameField=()=>isLeader()?`<label class="fl">Autor (z konta lidera)<input name="who" value="${esc(ME.name)}" readonly></label>`
+  :`<label class="fl">Twoje imię i nazwisko<input name="who" required value="${esc(myName())}" autocomplete="name"></label>`;
+const prioSeg=sel=>`<div class="fl">Priorytet<div class="seg">${Object.entries(PRIO).map(([k,p])=>`<label><input type="radio" name="prio" value="${k}"${k===sel?' checked':''}><span>${p.l}</span></label>`).join('')}</div></div>`;
+const lineField=(val,id)=>`<label class="fl">Linia<input name="line" list="${id}" required autocomplete="off" value="${esc(val||'')}" placeholder="Zacznij pisać, np. A30"></label>
+  <datalist id="${id}">${activeLines().map(l=>`<option value="${esc(l.code)}">${esc(l.sector)}</option>`).join('')}</datalist>`;
+// zwraca kod linii z tabeli (z właściwą wielkością liter) albo null, gdy takiej aktywnej linii nie ma
+const pickLine=(v,keep)=>{v=String(v||'').trim();if(!DB.lines.length)return v||null;const l=findLine(v);return l&&(l.active!==false||l.code===keep)?l.code:null};
+function contactsHtml(L){if(!L)return'';
+  const xs=LCOLS.slice(2).filter(([k])=>L[k]).map(([k,l])=>`<span><b>${l}:</b> ${esc(L[k])}</span>`);
+  if(L.notes)xs.push(`<span><b>Uwagi:</b> ${esc(L.notes)}</span>`);
+  return xs.length?`<div class="contacts">${xs.join('')}</div>`:''}
 
-function renderDrawer(){
+function renderDrawer(force){
   const i=DB.issues.find(x=>x.id===curId);if(!i){closeDrawer();return}
-  const cur=shiftAt(Date.now()),v=info(i,cur),sim=similar(i);
-  $('#dr').innerHTML=`<button class="btn x" data-close>Zamknij</button>
+  // nie przerywaj pisania ani dyktowania – odświeżymy przy następnej okazji
+  if(!force&&(rec||document.activeElement?.closest('#dr form')))return;
+  const dr=$('#dr'),top=dr.scrollTop,of=$('#fEntry'),same=of&&of.dataset.issue===i.id;
+  const keep=same?{kind:of.kind.value,text:of.text.value,st:of.status.dataset.touched?of.status.value:null,who:of.who.value}:null;
+  const ackWho=same?$('#fAck')?.who?.value:null,edOpen=same&&!force&&$('#dEdit')?.open;
+  const cur=shiftAt(Date.now()),v=info(i,cur),sim=similar(i),L=lineOf(i.line);
+  dr.innerHTML=`<button class="btn x" data-close>Zamknij</button>
   <div class="dhead" style="--c:${PRIO[i.priority]?.c}">
-    <div class="row"><span class="ln">${esc(i.line)}</span><span class="chip">Priorytet: ${esc(PRIO[i.priority]?.l)}</span><span class="chip st-${esc(i.status)}">${esc(STATUS[i.status])}</span>${i.lds?`<span class="chip">${esc(i.lds)}</span>`:''}</div>
+    <div class="row"><span class="ln">${esc(i.line)}</span>${L?.sector?`<span class="chip">${esc(L.sector)}</span>`:''}<span class="chip">Priorytet: ${esc(PRIO[i.priority]?.l)}</span><span class="chip st-${esc(i.status)}">${esc(STATUS[i.status])}</span>${i.lds?`<span class="chip">${esc(i.lds)}</span>`:''}</div>
     <h2>${esc(i.title)}</h2>${i.description?`<p style="margin:0">${esc(i.description)}</p>`:''}
-    <span class="meta">Zgłosił: ${esc(i.created_by)} · ${fdt(i.created_at)}${i.closed_at?' · zamknięto '+fdt(i.closed_at):''}</span></div>
+    <span class="meta">Zgłosił: ${esc(i.created_by)} · ${fdt(i.created_at)}${i.closed_at?' · zamknięto '+fdt(i.closed_at):''}</span>
+    ${contactsHtml(L)}</div>
   ${v.needsAck?`<form class="box warn" id="fAck"><h3>Priorytet nie jest jeszcze przejęty przez zmianę ${cur.label}</h3>${nameField()}<button class="btn red">Przejmuję na mojej zmianie</button></form>`:''}
-  <form class="box" id="fEntry"><h3>Dodaj wpis</h3>
+  <form class="box" id="fEntry" data-issue="${esc(i.id)}"><h3>Dodaj wpis</h3>
     <div class="seg">${['komentarz','zrobione','do_zrobienia'].map((k,n)=>`<label><input type="radio" name="kind" value="${k}"${n?'':' checked'}><span>${KIND[k]}</span></label>`).join('')}</div>
     ${voice('text','Co zostało zrobione, co dalej, jakie części…',false)}
     <label class="fl">Status<select name="status">${Object.entries(STATUS).map(([k,l])=>`<option value="${k}"${k===i.status?' selected':''}>${l}</option>`).join('')}</select></label>
     ${nameField()}<button class="btn green">Zapisz wpis</button></form>
+  ${isLeader()?`<details class="box" id="dEdit"${edOpen?' open':''}><summary>Zmień ważność lub dane zgłoszenia (lider)</summary>
+    <form id="fEdit" style="display:grid;gap:10px">${prioSeg(i.priority)}${lineField(i.line,'dlEdit')}
+    <label class="fl">Problem (krótko)<input name="title" required maxlength="120" value="${esc(i.title)}"></label>
+    <label class="fl">Opis<textarea name="desc">${esc(i.description)}</textarea></label>
+    <label class="fl">Nr zgłoszenia w LDS<input name="lds" value="${esc(i.lds)}"></label>
+    <button class="btn red">Zapisz zmiany</button></form></details>`:''}
   ${sim.length?`<div class="box"><h3>Podobne przypadki z historii</h3>${sim.map(({o})=>{const z=DB.entries.filter(e=>e.issue_id===o.id&&e.kind==='zrobione').map(e=>e.text).join(' ');
     return`<div class="sim"><b>${esc(o.line)} · ${esc(o.title)}</b> <span class="meta">(${fdt(o.created_at).slice(0,5)})</span><br>Rozwiązanie: ${esc(z||'brak opisu')}</div>`}).join('')}</div>`:''}
   <div class="box"><h3>Historia wpisów</h3><ul class="tl">${[...v.es].reverse().map(e=>`<li class="${esc(e.kind)}"><span class="meta">Zm. ${shiftAt(e.created_at).label} · ${fdt(e.created_at)} · ${esc(e.author)}</span><br>
     <span class="k">${esc(KIND[e.kind]||e.kind)}</span>${e.status?` <span class="chip st-${esc(e.status)}">${esc(STATUS[e.status])}</span>`:''}${e.text?' – '+esc(e.text):''}</li>`).join('')}</ul></div>`;
-  bindVoice($('#dr'));
-  const fa=$('#fAck');if(fa)fa.onsubmit=async ev=>{ev.preventDefault();const who=ev.target.who.value.trim();if(!who)return;ls.set('tablica_ur_name',who);
-    await run(()=>store.addEntry({id:uid(),issue_id:i.id,kind:'przejecie',author:who,text:'',status:null,shift_key:cur.key,created_at:iso(Date.now())}),'Priorytet przejęty')};
-  $('#fEntry').onsubmit=async ev=>{ev.preventDefault();const f=ev.target,who=f.who.value.trim(),text=f.text.value.trim(),st=f.status.value,ch=st!==i.status;
-    if(!text&&!ch){toast('Wpisz treść albo zmień status');return}ls.set('tablica_ur_name',who);stopRec();
-    await run(async()=>{const now=Date.now();
-      await store.addEntry({id:uid(),issue_id:i.id,kind:text?f.kind.value:'status',author:who,text,status:ch?st:null,shift_key:shiftAt(now).key,created_at:iso(now)});
-      if(ch)await store.updIssue(i.id,{status:st,closed_at:st==='rozwiazane'?iso(now):null});},'Zapisano wpis')};
+  const fe=$('#fEntry');
+  if(keep){fe.kind.value=keep.kind;fe.text.value=keep.text;fe.who.readOnly||(fe.who.value=keep.who);if(keep.st){fe.status.value=keep.st;fe.status.dataset.touched='1'}}
+  if(ackWho&&$('#fAck')&&!isLeader())$('#fAck').who.value=ackWho;
+  dr.scrollTop=top;
+  fe.status.onchange=()=>{fe.status.dataset.touched='1'};
+  bindVoice(dr);
+  const fa=$('#fAck');if(fa)fa.onsubmit=async ev=>{ev.preventDefault();const who=ev.target.who.value.trim();if(!who)return;if(!isLeader())ls.set('tablica_ur_name',who);
+    await run(()=>store.addEntry({issue_id:i.id,kind:'przejecie',author:who,text:'',status:null}),'Priorytet przejęty')};
+  fe.onsubmit=async ev=>{ev.preventDefault();const f=ev.target,who=f.who.value.trim(),text=f.text.value.trim(),st=f.status.value,ch=st!==i.status;
+    if(!text&&!ch){toast('Wpisz treść albo zmień status');return}if(!isLeader())ls.set('tablica_ur_name',who);stopRec();
+    await run(async()=>{await store.addEntry({issue_id:i.id,kind:text?f.kind.value:'status',author:who,text,status:ch?st:null});
+      f.text.value='';delete f.status.dataset.touched},'Zapisano wpis')};
+  const fd=$('#fEdit');if(fd)fd.onsubmit=async ev=>{ev.preventDefault();const f=ev.target,line=pickLine(f.line.value,i.line);
+    if(!line){toast('Nie ma takiej aktywnej linii – sprawdź zakładkę Linie');f.line.focus();return}
+    const p={priority:f.prio.value,line,title:f.title.value.trim(),description:f.desc.value.trim(),lds:f.lds.value.trim()};
+    Object.keys(p).forEach(k=>{if((p[k]||'')===(i[k]||''))delete p[k]});
+    if(!Object.keys(p).length){toast('Nic nie zmieniono');return}
+    await run(()=>store.editIssue(i.id,p),'Zapisano zmiany')};
 }
-function openIssue(id){curId=id;$('#drawer').hidden=false;renderDrawer()}
+function openIssue(id){curId=id;$('#drawer').hidden=false;$('#dr').innerHTML='';renderDrawer(true)}
 function closeDrawer(){stopRec();curId=null;$('#drawer').hidden=true}
 
-/* ===== Nowy priorytet ===== */
+/* ===== Nowy priorytet (tylko lider) ===== */
 function newIssue(){
-  if(!leader){modal(`<h2>Dodawanie priorytetów</h2><p class="meta">Priorytety dodają osoby wyznaczone. Podaj PIN.</p>
-    <form id="fp" class="box"><label class="fl">PIN<input name="pin" type="password" inputmode="numeric" required></label><p class="hint" id="perr"></p><button class="btn red">Dalej</button></form>`);
-    $('#fp').onsubmit=ev=>{ev.preventDefault();if(ev.target.pin.value===CONFIG.LEADER_PIN){leader=true;ls.set('tablica_ur_leader','1');newIssue()}else $('#perr').textContent='Nieprawidłowy PIN.'};return}
+  if(!isLeader()){toast('Priorytety dodają liderzy – zaloguj się własnym kontem');return}
   modal(`<h2>Nowy priorytet</h2><form id="fn" class="box">
-    <label class="fl">Linia<select name="line" required>${CONFIG.LINES.map(l=>`<option>${esc(l)}</option>`).join('')}</select></label>
-    <div class="fl">Priorytet<div class="seg">${Object.entries(PRIO).map(([k,p],n)=>`<label><input type="radio" name="prio" value="${k}"${n?'':' checked'}><span>${p.l}</span></label>`).join('')}</div></div>
+    ${lineField('','dlNew')}${prioSeg('W')}
     <label class="fl">Problem (krótko)<input name="title" required maxlength="120" placeholder="np. Zgrzewarka – błąd E-214"></label>
     <div class="fl">Opis${voice('desc','Objawy, co już wiadomo, czego pilnować…',false)}</div>
     <label class="fl">Nr zgłoszenia w LDS (opcjonalnie)<input name="lds" placeholder="np. LDS-48250"></label>
     ${nameField()}<button class="btn red">Dodaj na tablicę</button></form>`);
-  $('#fn').onsubmit=async ev=>{ev.preventDefault();const f=ev.target,who=f.who.value.trim(),now=Date.now(),id=uid();ls.set('tablica_ur_name',who);stopRec();
-    await run(async()=>{await store.addIssue({id,line:f.line.value,priority:f.prio.value,status:'nowe',title:f.title.value.trim(),description:f.desc.value.trim(),lds:f.lds.value.trim(),created_by:who,created_at:iso(now),closed_at:null});
-      await store.addEntry({id:uid(),issue_id:id,kind:'utworzenie',author:who,text:f.desc.value.trim(),status:null,shift_key:shiftAt(now).key,created_at:iso(now)});closeModal()},'Dodano priorytet')};
+  $('#fn').onsubmit=async ev=>{ev.preventDefault();const f=ev.target,line=pickLine(f.line.value);
+    if(!line){toast('Nie ma takiej aktywnej linii – dodaj ją w zakładce Linie');f.line.focus();return}
+    stopRec();
+    await run(async()=>{await store.createIssue({line,priority:f.prio.value,title:f.title.value.trim(),description:f.desc.value.trim(),lds:f.lds.value.trim(),created_by:f.who.value.trim()});closeModal()},'Dodano priorytet')};
 }
 
 /* ===== Historia ===== */
 function renderHist(){
-  const q=$('#hq').value.toLowerCase(),l=$('#hl').value,s=$('#hs').value;
+  const hl=$('#hl'),codes=[...new Set([...DB.lines.map(l=>l.code),...DB.issues.map(i=>i.line)])].sort((a,b)=>a.localeCompare(b,'pl',{numeric:true}));
+  if(hl.dataset.codes!==codes.join('|')){const sel=hl.value;hl.dataset.codes=codes.join('|');
+    hl.innerHTML='<option value="">Wszystkie linie</option>'+codes.map(c=>`<option${c===sel?' selected':''}>${esc(c)}</option>`).join('')}
+  const q=$('#hq').value.toLowerCase(),l=hl.value,s=$('#hs').value;
   const rows=DB.issues.filter(i=>{if(l&&i.line!==l)return false;if(s==='o'&&i.status==='rozwiazane')return false;if(s==='z'&&i.status!=='rozwiazane')return false;
-    if(!q)return true;const txt=[i.line,i.title,i.description,i.lds,i.created_by,...DB.entries.filter(e=>e.issue_id===i.id).map(e=>e.text+' '+e.author)].join(' ').toLowerCase();return txt.includes(q)})
+    if(!q)return true;const txt=[i.line,lineOf(i.line)?.sector,i.title,i.description,i.lds,i.created_by,...DB.entries.filter(e=>e.issue_id===i.id).map(e=>e.text+' '+e.author)].join(' ').toLowerCase();return txt.includes(q)})
     .sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
   $('#htb').innerHTML=rows.length?rows.map(i=>`<tr data-id="${esc(i.id)}"><td><b>${esc(i.line)}</b></td><td>${esc(PRIO[i.priority]?.l)}</td><td>${esc(i.title)}${i.lds?` <span class="meta">${esc(i.lds)}</span>`:''}</td>
     <td><span class="chip st-${esc(i.status)}">${esc(STATUS[i.status])}</span></td><td class="num">${fdt(i.created_at)}</td><td class="num">${i.closed_at?fdt(i.closed_at):''}</td>
     <td class="num">${dur((i.closed_at?new Date(i.closed_at):Date.now())-new Date(i.created_at))}</td></tr>`).join(''):'<tr><td colspan="7">Nic nie znaleziono.</td></tr>';
+}
+
+/* ===== Linie ===== */
+function renderLines(){
+  $('#lTools').hidden=!isLeader();
+  $('#lMiss').hidden=!(store===remote&&remote.missing.lines);
+  const q=$('#lq').value.toLowerCase(),a=$('#la').value;
+  const rows=DB.lines.filter(l=>(a==='a'?l.active!==false:a==='n'?l.active===false:true)&&(!q||[...LCOLS.map(([k])=>l[k]),l.notes].join(' ').toLowerCase().includes(q))).sort(byCode);
+  const openCnt=c=>DB.issues.filter(i=>i.line===c&&i.status!=='rozwiazane').length;
+  $('#ltb').innerHTML=rows.length?rows.map(l=>`<tr data-line="${esc(l.code)}"${l.active===false?' class="off"':''}>${LCOLS.map(([k],n)=>`<td>${n?esc(l[k]):`<b>${esc(l.code)}</b>${l.active===false?' <span class="chip">nieaktywna</span>':''}`}</td>`).join('')}<td class="num">${openCnt(l.code)||''}</td></tr>`).join('')
+    :`<tr><td colspan="7">${DB.lines.length?'Nic nie znaleziono.':'Brak linii.'}</td></tr>`;
+}
+function lineDialog(code){
+  const l=code?lineOf(code):null,ro=!isLeader();if(code&&!l)return;
+  const fld=(k,lab,extra='')=>`<label class="fl">${lab}<input name="${k}" value="${esc(l?.[k]||'')}"${ro?' readonly':''}${extra}></label>`;
+  modal(`<h2>${l?'Linia '+esc(l.code):'Nowa linia'}</h2><form id="fl" class="box">
+    ${l?'':fld('code','Numer linii',' required maxlength="30" autocomplete="off"')}
+    ${LCOLS.slice(1).map(([k,lab])=>fld(k,lab==='Dział NJ'?'Osoba odpowiedzialna z działu NJ':lab)).join('')}
+    <label class="fl">Uwagi (np. telefony)<textarea name="notes"${ro?' readonly':''}>${esc(l?.notes||'')}</textarea></label>
+    ${ro?'<p class="hint">Dane linii zmieniają liderzy.</p>':`<label class="chk"><input type="checkbox" name="active"${!l||l.active!==false?' checked':''}> Linia aktywna – można na niej zgłaszać priorytety</label>
+    <p class="hint">Linii się nie usuwa. Nieaktywna znika z listy wyboru, ale jej historia zostaje.</p><button class="btn red">Zapisz</button>`}</form>`);
+  if(ro)return;
+  $('#fl').onsubmit=async ev=>{ev.preventDefault();const f=ev.target,c=l?l.code:f.code.value.trim();
+    if(!l&&findLine(c)){toast('Linia '+c+' już istnieje');return}
+    const o={code:c};LCOLS.slice(1).forEach(([k])=>o[k]=f[k].value.trim());o.notes=f.notes.value.trim();o.active=f.active.checked;
+    await run(async()=>{await store.saveLines([o]);closeModal()},'Zapisano linię '+c)};
+}
+// Wklejka z Excela: kolumny oddzielone tabulatorem (tak kopiuje Excel) albo średnikiem.
+// Puste pole przy istniejącej linii nie kasuje jej danych.
+function parsePaste(txt){const m=new Map();
+  txt.split(/\r?\n/).forEach((row,n)=>{const c=row.split(row.includes('\t')?'\t':';').map(s=>s.trim());
+    if(!c[0]||(n===0&&/^(linia|nr|numer|kod)/i.test(c[0])))return;
+    const ex=findLine(c[0]),prev=m.get(c[0].toLowerCase())?.o,base=prev||ex,o={code:base?base.code:c[0]};
+    LCOLS.slice(1).forEach(([k],j)=>o[k]=c[j+1]||base?.[k]||'');o.notes=base?.notes||'';o.active=base?base.active!==false:true;
+    m.set(o.code.toLowerCase(),{o,ex:!!ex})});
+  return[...m.values()]}
+function pasteDialog(){
+  modal(`<h2>Wklej listę linii</h2><form id="fpaste" class="box">
+    <p class="meta" style="margin:0">Zaznacz w Excelu kolumny w tej kolejności: <b>${LCOLS.map(c=>c[1]).join(', ')}</b>, skopiuj i wklej poniżej. Jeden wiersz to jedna linia, a wiersz nagłówka zostanie pominięty. Puste pole przy istniejącej linii nie kasuje jej danych.</p>
+    <textarea name="t" style="min-height:220px" placeholder="A30&#9;Sektor 1&#9;Jan Nowak&#9;…"></textarea>
+    <p class="hint" id="psum">Wklej dane.</p><button class="btn red">Zapisz linie</button></form>`);
+  const f=$('#fpaste');
+  f.t.addEventListener('input',()=>{const r=parsePaste(f.t.value),n=r.filter(x=>!x.ex).length;$('#psum').textContent=r.length?`Nowe linie: ${n} · aktualizacja istniejących: ${r.length-n}`:'Wklej dane.'});
+  f.onsubmit=async ev=>{ev.preventDefault();const r=parsePaste(f.t.value);
+    if(!r.length){toast('Brak danych do zapisania');return}
+    if(r.some(x=>x.o.code.length>30)){toast('Za długi numer linii – sprawdź kolejność kolumn');return}
+    await run(async()=>{await store.saveLines(r.map(x=>x.o));closeModal()},'Zapisano linie: '+r.length)};
 }
 
 /* ===== Raport zmiany ===== */
@@ -416,11 +576,11 @@ function report(s){
   out.push('PRIORYTETY');
   act.forEach(i=>{const es=DB.entries.filter(e=>e.issue_id===i.id&&inS(e.created_at)).sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
     const ack=es.find(e=>e.kind==='przejecie'),work=es.filter(e=>e.kind!=='przejecie'&&e.kind!=='utworzenie');
-    work.length?withAct++:noAct++;
+    work.some(e=>!NOT_WORK.includes(e.kind))?withAct++:noAct++;
     out.push('',`[${(PRIO[i.priority]?.l||'').toUpperCase()}] ${i.line} – ${i.title}${i.lds?' ('+i.lds+')':''}`);
     out.push(`  Status: ${STATUS[i.status]}${inS(i.created_at)?' · NOWE na tej zmianie':''}${ack?' · przejął: '+ack.author:''}`);
     work.forEach(e=>out.push(`  - ${fhm(e.created_at)} ${KIND[e.kind]} (${e.author})${e.status?' → '+STATUS[e.status]:''}${e.text?': '+e.text:''}`));
-    if(!work.length)out.push('  ! BRAK DZIAŁAŃ NA TEJ ZMIANIE');});
+    if(!work.some(e=>!NOT_WORK.includes(e.kind)))out.push('  ! BRAK DZIAŁAŃ NA TEJ ZMIANIE');});
   const closed=act.filter(i=>i.closed_at&&inS(i.closed_at));
   out.push('','ZAMKNIĘTE NA ZMIANIE: '+(closed.length?closed.map(i=>i.line+' – '+i.title).join('; '):'brak'));
   return{txt:out.join('\n'),k:[[act.length,'aktywnych priorytetów',''],[withAct,'z działaniami','g'],[noAct,'bez działań','r'],[closed.length,'zamkniętych','g']]};
@@ -450,20 +610,36 @@ function bindVoice(root){root.querySelectorAll('.mic').forEach(btn=>{const ta=bt
     r.onend=()=>{rec=null;btn.classList.remove('rec');ta.value=ta.value.trim()};
     try{r.start();rec=r;btn.classList.add('rec');hint.textContent='Słucham… kliknij ponownie, aby zakończyć.'}catch(e){hint.textContent='Nie można uruchomić mikrofonu.'}}})}
 
+/* ===== Konto / kto pracuje ===== */
+function whoDialog(){
+  const acct=store===remote?`<p class="meta" style="margin:0">Zalogowano: <b>${esc(ME.email)}</b> · ${isLeader()?'konto lidera':'wspólne konto działu'}</p>`:'';
+  modal(`<h2>${isLeader()?'Konto lidera':'Kto pracuje na tym urządzeniu?'}</h2>
+    ${isLeader()?`<div class="box"><p style="margin:0">Wpisy podpisują się automatycznie: <b>${esc(ME.name)}</b>.</p>${acct}</div>`
+      :`<form id="fw" class="box">${nameField()}<button class="btn red">Zapisz</button></form>${acct?`<div class="box">${acct}<p class="hint" style="margin:0">Lider, żeby dodawać priorytety, wylogowuje się i loguje własnym kontem.</p></div>`:''}`}
+    ${store===remote?'<button class="btn" id="bOut">Wyloguj to urządzenie</button>':`<button class="btn" id="bDemoL">${isLeader()?'Demo: wyjdź z roli lidera':'Demo: wejdź jako lider'}</button>`}`);
+  const fw=$('#fw');if(fw)fw.onsubmit=ev=>{ev.preventDefault();ls.set('tablica_ur_name',ev.target.who.value.trim());closeModal();render()};
+  const bo=$('#bOut');if(bo)bo.onclick=async()=>{closeModal();try{await store.signOut()}catch(e){toast('Nie udało się wylogować: '+(e.message||e))}};
+  const bd=$('#bDemoL');if(bd)bd.onclick=()=>{const on=!isLeader();ls.set('tablica_ur_demo_leader',on?'1':'0');ME=on?{role:'lider',name:'Lider (demo)',email:''}:{role:null,name:'',email:''};closeModal();render()};
+}
+
 /* ===== Wspólne ===== */
-function modal(html,locked){$('#dlg').innerHTML=(locked?'':'<button class="btn x" data-close>Zamknij</button>')+html;$('#modal').hidden=false;$('#modal').dataset.locked=locked?'1':'';bindVoice($('#dlg'));const f=$('#dlg input:not([type=radio]),#dlg select');if(f)f.focus()}
+function modal(html,locked){$('#dlg').innerHTML=(locked?'':'<button class="btn x" data-close>Zamknij</button>')+html;$('#modal').hidden=false;$('#modal').dataset.locked=locked?'1':'';bindVoice($('#dlg'));const f=$('#dlg input:not([type=radio]):not([readonly]),#dlg select');if(f)f.focus()}
 function closeModal(){stopRec();$('#modal').hidden=true}
-let tt=0;function toast(m){let t=$('.toast');if(!t){t=document.createElement('div');t.className='toast';t.setAttribute('role','status');document.body.appendChild(t)}t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,2600)}
-async function run(fn,ok){try{await fn();if(store===remote)await remote.reload();render();if(curId&&!$('#drawer').hidden)renderDrawer();toast(ok)}catch(e){toast('Nie zapisano: '+(e.message||e))}}
+let tt=0;function toast(m){let t=$('.toast');if(!t){t=document.createElement('div');t.className='toast';t.setAttribute('role','status');document.body.appendChild(t)}t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,3200)}
+const errMsg=e=>{const m=e?.message||String(e);return /row-level security|permission denied|brak uprawnień/i.test(m)?'brak uprawnień – to może zrobić tylko lider':/foreign key/i.test(m)?'nie ma takiej linii w tabeli linii':m};
+async function run(fn,ok){
+  try{await fn()}catch(e){toast('Nie zapisano: '+errMsg(e));return false}
+  if(store===remote)await remote.reload();render();if(curId&&!$('#drawer').hidden)renderDrawer(true);toast(ok);return true}
 function render(){
-  $('#bWho').textContent=myName()?'Ty: '+myName():'Podaj nazwisko';
-  if(view==='tablica')renderBoard();if(view==='historia')renderHist();if(view==='raport')renderRep();
-  if(curId&&!$('#drawer').hidden&&!document.activeElement?.closest('#dr form'))renderDrawer();
+  $('#bWho').textContent=isLeader()?'Lider: '+ME.name:(myName()?'Ty: '+myName():'Podaj nazwisko');
+  $('#bNew').hidden=!isLeader();
+  if(view==='tablica')renderBoard();if(view==='historia')renderHist();if(view==='raport')renderRep();if(view==='linie')renderLines();
+  if(curId&&!$('#drawer').hidden)renderDrawer();
 }
 function route(){
   if(!$('#drawer').hidden)closeDrawer();
   const h=location.hash.slice(1)||'tablica',tv=h==='tv';
-  view=['historia','raport'].includes(h)?h:'tablica';
+  view=['historia','raport','linie'].includes(h)?h:'tablica';
   document.body.classList.toggle('tv',tv);
   document.querySelectorAll('.view').forEach(s=>s.classList.toggle('on',s.id==='v-'+view));
   document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.dataset.v===view));
@@ -473,6 +649,7 @@ function tick(){const now=new Date(),c=shiftAt(now);$('#clock').textContent=pad(
 
 document.addEventListener('click',e=>{
   const id=e.target.closest('[data-id]');if(id&&!e.target.closest('#dr')){openIssue(id.dataset.id);return}
+  const ln=e.target.closest('[data-line]');if(ln&&!e.target.closest('#dlg')){lineDialog(ln.dataset.line);return}
   if(e.target.closest('[data-close]')){if(e.target.closest('#dr'))closeDrawer();else closeModal();return}
   if(e.target.id==='drawer')closeDrawer();
   if(e.target.id==='modal'&&!$('#modal').dataset.locked)closeModal();
@@ -481,17 +658,18 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!$('#modal').hid
 $('#bNew').onclick=newIssue;
 $('#bTv').onclick=()=>{location.hash='tv';const p=document.documentElement.requestFullscreen?.();if(p)p.catch(()=>{})};
 $('#bTvExit').onclick=()=>{location.hash='tablica';if(document.fullscreenElement)document.exitFullscreen().catch(()=>{})};
-$('#bWho').onclick=()=>{modal(`<h2>Kto pracuje na tym urządzeniu?</h2><form id="fw" class="box">${nameField()}<button class="btn red">Zapisz</button></form>`);
-  $('#fw').onsubmit=ev=>{ev.preventDefault();ls.set('tablica_ur_name',ev.target.who.value.trim());closeModal();render()}};
-CONFIG.LINES.forEach(l=>{const o=document.createElement('option');o.textContent=l;$('#hl').appendChild(o)});
+$('#bWho').onclick=whoDialog;
+$('#lAdd').onclick=()=>lineDialog();
+$('#lPaste').onclick=pasteDialog;
 ['#hq','#hl','#hs'].forEach(s=>$(s).addEventListener('input',renderHist));
+['#lq','#la'].forEach(s=>$(s).addEventListener('input',renderLines));
 addEventListener('hashchange',route);
 $('#rCopy').onclick=async()=>{try{await navigator.clipboard.writeText($('#rtxt').textContent);toast('Skopiowano raport')}catch(e){toast('Zaznacz tekst raportu i skopiuj ręcznie')}};
 
 (async()=>{
   tick();setInterval(tick,1000);
   store=CONFIG.SUPABASE_URL&&CONFIG.SUPABASE_ANON_KEY?remote:demo;
-  try{await store.init()}catch(e){toast('Błąd uruchamiania: '+(e.message||e))}
+  try{await store.init()}catch(e){SYNC.ok=false;SYNC.err=e.message||String(e);toast('Błąd uruchamiania: '+SYNC.err)}
   route();
   setInterval(()=>{if(view==='tablica')renderBoard()},60e3);
 })();
