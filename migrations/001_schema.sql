@@ -1,5 +1,7 @@
--- Tablica priorytetów UR – struktura bazy dla Supabase
--- Wklej całość w Supabase: SQL Editor -> New query -> Run
+-- Migracja 001: podstawowa struktura bazy (tabele issues i entries)
+-- TYLKO dla nowego, pustego projektu Supabase. Jeśli tablica już działa – pomiń ten plik.
+-- Gdzie uruchomić: Supabase -> SQL Editor -> New query -> wklej całość -> Run.
+-- Potem uruchom kolejno 002_liderzy.sql i 003_linie.sql.
 
 create table if not exists public.issues (
   id          uuid primary key default gen_random_uuid(),
