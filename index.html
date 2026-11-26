@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tablica priorytetów UR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* VOICE: rzeczowy, warsztatowy - tablica SIM utrzymania ruchu
+   IDEA: tablica andon / magnetyczna tablica SIM z kartami linii
+   PICTURE: sama tablica - trzy kolumny priorytetow z kartami awarii
+   COLOUR and TYPE: grafit + sygnaly andon (czerwien, bursztyn, blekit, zielen); Barlow Condensed + Barlow
+   LAYOUT: pasek zmiany i zegar u gory, pas alertow, tablica na cala szerokosc */
+:root{color-scheme:light;--bg:#e9ebe7;--panel:#fff;--panel2:#f5f6f3;--ink:#14181c;--mute:#5a636b;--line:#d3d8d1;
+--redbg:#fde6e4;--amberbg:#fff2d2;--bluebg:#e5eefb;--greenbg:#e1f4e8;--redink:#a3150f;--amberink:#7a5200;--greenink:#11673a}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){color-scheme:dark;--bg:#101316;--panel:#1a1f24;--panel2:#14181c;--ink:#eef1f3;--mute:#9aa4ad;--line:#2b333a;
+--redbg:#3a1614;--amberbg:#36290b;--bluebg:#12233a;--greenbg:#0f2e1d;--redink:#ff8f88;--amberink:#ffd166;--greenink:#7fe0a6}}
+:root[data-theme=dark]{color-scheme:dark;--bg:#101316;--panel:#1a1f24;--panel2:#14181c;--ink:#eef1f3;--mute:#9aa4ad;--line:#2b333a;
+--redbg:#3a1614;--amberbg:#36290b;--bluebg:#12233a;--greenbg:#0f2e1d;--redink:#ff8f88;--amberink:#ffd166;--greenink:#7fe0a6}
+:root{--bar:#1a1f24;--red:#e0322b;--amber:#f0a500;--blue:#3f7fd9;--green:#1e9e57}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Barlow,system-ui,sans-serif;overflow-x:clip}
+h1,h2,h3,.cond{font-family:'Barlow Condensed',Barlow,sans-serif;margin:0;line-height:1.1}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+[hidden]{display:none!important}
+.top{background:var(--bar);color:#f3f5f6;display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;padding:10px max(3vw,14px);position:sticky;top:0;z-index:5}
+.brand{font:700 22px/1 'Barlow Condensed','Arial Narrow',sans-serif}
+.shift{font:600 20px/1 'Barlow Condensed','Arial Narrow',sans-serif;display:flex;gap:8px;align-items:baseline;white-space:nowrap}
+.shift b{font-size:28px;color:var(--amber)}.shift span{color:#aab4bd;font-weight:500}
+.clock{font:700 28px/1 'Barlow Condensed','Arial Narrow',sans-serif;font-variant-numeric:tabular-nums}
+nav{display:flex;gap:2px;margin-left:auto;flex-wrap:wrap}
+nav a{color:#cfd6dc;text-decoration:none;padding:10px 12px;border-radius:8px;font-weight:600}
+nav a.on{background:#2e363e;color:#fff}
+.btn{min-height:44px;padding:0 16px;border-radius:10px;border:1px solid var(--line);background:var(--panel);cursor:pointer;font-weight:600;display:inline-flex;align-items:center;gap:8px;justify-content:center}
+.btn{text-decoration:none}
+.btn.red{background:var(--red);border-color:var(--red);color:#fff}
+.btn.green{background:var(--green);border-color:var(--green);color:#fff}
+.top .btn{background:#2e363e;border-color:#3a434c;color:#fff}.top .btn.red{background:var(--red);border-color:var(--red)}
+.who{color:#cfd6dc;font-size:14px;background:none;border:0;cursor:pointer;min-height:44px;text-decoration:underline dotted}
+.alerts{display:flex;flex-wrap:wrap;gap:8px;padding:14px max(3vw,14px) 12px;align-items:center}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;font-weight:600;background:var(--panel);border:1px solid var(--line);white-space:nowrap}
+.pill b{font:700 22px/1 'Barlow Condensed','Arial Narrow',sans-serif}
+.pill.r{background:var(--redbg);color:var(--redink);border-color:transparent}
+.pill.a{background:var(--amberbg);color:var(--amberink);border-color:transparent}
+.pill.g{background:var(--greenbg);color:var(--greenink);border-color:transparent}
+.board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:0 max(3vw,14px) 16px;align-items:start}
+.col{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:10px;display:grid;gap:10px}
+.colh{display:flex;justify-content:space-between;align-items:center;font:700 24px/1 'Barlow Condensed','Arial Narrow',sans-serif;padding:6px 4px 10px;border-bottom:5px solid var(--c)}
+.colh small{font:600 16px Barlow;color:var(--mute)}
+.empty{color:var(--mute);padding:18px 6px;text-align:center}
+.card{all:unset;box-sizing:border-box;background:var(--panel);border:1px solid var(--line);border-left:9px solid var(--c);border-radius:10px;padding:12px 14px;cursor:pointer;display:grid;gap:8px;width:100%}
+.card:focus-visible{outline:3px solid var(--amber)}
+.card.alarm{border-color:var(--red);border-left-color:var(--c);box-shadow:0 0 0 2px var(--red)}
+.card.wait{animation:pulse 2.4s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 5px rgba(240,165,0,.45)}}
+@media(prefers-reduced-motion:reduce){.card.wait{animation:none;box-shadow:0 0 0 3px var(--amber)}}
+.h{display:flex;gap:12px;align-items:baseline}
+.ln{font:700 32px/1 'Barlow Condensed','Arial Narrow',sans-serif;flex:none}
+.ttl{font-weight:600;font-size:17px;line-height:1.3}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.meta{color:var(--mute);font-size:14px}
+.chip{display:inline-block;padding:2px 9px;border-radius:6px;font-size:13px;font-weight:600;background:var(--panel2);border:1px solid var(--line);white-space:nowrap}
+.st-czeka_czesc,.st-czeka_postoj{background:var(--amberbg);border-color:transparent;color:var(--amberink)}
+.st-w_trakcie{background:var(--bluebg);border-color:transparent}
+.st-rozwiazane{background:var(--greenbg);border-color:transparent;color:var(--greenink)}
+.flag{font-size:13px;font-weight:700;padding:3px 9px;border-radius:6px;white-space:nowrap}
+.flag.r{background:var(--red);color:#fff}.flag.a{background:var(--amber);color:#1a1300}.flag.g{background:var(--greenbg);color:var(--greenink)}
+.last{font-size:15px;line-height:1.4}
+.todo{background:var(--amberbg);border-radius:8px;padding:6px 10px;font-size:15px;line-height:1.4}
+.done24{padding:4px max(3vw,14px) 28px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.done24 h3{font-size:20px;margin-right:6px}
+.done24 button{all:unset;cursor:pointer}
+.foot{padding:0 max(3vw,14px) 30px;color:var(--mute);font-size:14px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.view{display:none}.view.on{display:block}
+.band{padding:20px max(3vw,14px) 40px;max-width:1300px}
+.filters{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}
+input,select,textarea{min-height:44px;font-size:16px;border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:8px 12px;width:100%}
+textarea{min-height:96px;resize:vertical}
+.filters>*{width:auto;flex:1 1 180px}
+table{width:100%;border-collapse:collapse;background:var(--panel);border-radius:12px;overflow:hidden}
+th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font:600 14px Barlow;color:var(--mute);background:var(--panel2)}
+tbody tr{cursor:pointer}tbody tr:hover{background:var(--panel2)}
+td.num{text-align:right;white-space:nowrap}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:16px 0}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.kpi b{display:block;font:700 40px/1 'Barlow Condensed','Arial Narrow',sans-serif}.kpi span{color:var(--mute);font-size:14px}
+.kpi.r b{color:var(--red)}.kpi.g b{color:var(--green)}
+pre.rep{white-space:pre-wrap;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;font:14px/1.5 ui-monospace,Consolas,monospace;overflow-x:auto}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg label{flex:1 1 auto}
+.seg input{position:absolute;opacity:0;width:1px;height:1px}
+.seg span{display:flex;align-items:center;justify-content:center;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);cursor:pointer;font-weight:600;white-space:nowrap}
+.seg input:checked+span{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.seg input:focus-visible+span{outline:3px solid var(--amber)}
+.ov{position:fixed;inset:0;background:rgba(10,12,14,.55);z-index:20;display:flex}
+.dr{margin-left:auto;width:min(600px,100%);height:100%;overflow:auto;background:var(--bg);padding:18px;display:grid;gap:14px;align-content:start}
+.dlg{margin:auto;width:min(520px,94%);max-height:94vh;overflow:auto;background:var(--bg);border-radius:16px;padding:20px;display:grid;gap:12px}
+.dhead{border-left:9px solid var(--c);background:var(--panel);border-radius:12px;padding:14px 16px;display:grid;gap:8px}
+.dhead h2{font-size:30px}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;display:grid;gap:10px}
+.box.warn{background:var(--amberbg);border-color:transparent}
+.box h3{font-size:20px}
+.fl{display:grid;gap:4px;font-weight:600;font-size:14px}
+.voice{position:relative}
+.voice textarea{padding-right:60px}
+.mic{position:absolute;right:8px;top:8px;width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--panel2);cursor:pointer;display:grid;place-items:center}
+.mic.rec{background:var(--red);border-color:var(--red);color:#fff;animation:pulse 1.2s infinite}
+.hint{font-size:13px;color:var(--mute);margin:4px 0 0;font-weight:500}
+.tl{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.tl li{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.tl .k{font-weight:700}
+.tl .przejecie{background:transparent;border-style:dashed;color:var(--mute)}
+.tl .zrobione{border-left:5px solid var(--green)}.tl .do_zrobienia{border-left:5px solid var(--amber)}
+.sim{background:var(--bluebg);border-radius:10px;padding:10px 12px;font-size:15px}
+.x{justify-self:end}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--bar);color:#fff;padding:12px 18px;border-radius:10px;z-index:40;font-weight:600}
+.tvexit{display:none}
+/* Tryb TV */
+body.tv nav,body.tv .hide-tv{display:none!important}
+body.tv .tvexit{display:inline-flex;margin-left:auto;opacity:.5}
+body.tv .top{padding:1vh 2vw;position:static}
+body.tv .brand{font-size:2vw}body.tv .shift{font-size:1.5vw}body.tv .shift b{font-size:2.2vw}body.tv .clock{font-size:2.4vw}
+body.tv .alerts{padding:1.2vh 2vw}body.tv .pill{font-size:1.1vw}body.tv .pill b{font-size:1.6vw}
+body.tv .board{padding:0 2vw 1vh;gap:1vw}
+body.tv .colh{font-size:1.8vw}body.tv .colh small{font-size:1vw}
+body.tv .ln{font-size:2.3vw}body.tv .ttl{font-size:1.25vw}body.tv .meta,body.tv .chip,body.tv .flag{font-size:.9vw}
+body.tv .last,body.tv .todo{font-size:1vw}
+body.tv .done24{padding:.5vh 2vw 1vh;font-size:1vw}body.tv .done24 h3{font-size:1.4vw}
+@media(max-width:900px){.board{grid-template-columns:minmax(0,1fr)}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){nav{margin-left:0;width:100%}.top{position:static}.dr{padding:12px}
+table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-block:10px}.stack td{display:flow-root;border:0;padding:3px 12px;padding-inline-start:8em;text-align:start}.stack td::before{content:attr(data-l);float:inline-start;width:7.5em;margin-inline-start:-8em;color:var(--mute)}.stack td:empty{display:none}}
+</style>
+<script>new MutationObserver(()=>{for(const c of document.querySelectorAll('.stack td:not([data-l])')){let i=0,p=c;while(p=p.previousElementSibling)i+=p.colSpan;c.dataset.l=c.closest('table').rows[0].cells[i]?.textContent||''}}).observe(document,{childList:true,subtree:true})</script>
+</head>
+<body>
+<header class="top">
+  <span class="brand">Tablica priorytetów UR</span>
+  <span class="shift">Zmiana <b id="shN">I</b> <span id="shH">06:00–14:00</span></span>
+  <span class="clock" id="clock">--:--</span>
+  <nav>
+    <a href="#tablica" data-v="tablica">Tablica</a>
+    <a href="#historia" data-v="historia">Historia</a>
+    <a href="#raport" data-v="raport">Raport zmiany</a>
+  </nav>
+  <button class="btn red hide-tv" id="bNew">+ Nowy priorytet</button>
+  <button class="btn hide-tv" id="bTv">Tryb TV</button>
+  <button class="who hide-tv" id="bWho"></button>
+  <button class="btn tvexit" id="bTvExit">Wyjdź z trybu TV</button>
+</header>
+
+<section class="view" id="v-tablica">
+  <div class="alerts" id="alerts"></div>
+  <div class="board" id="board"></div>
+  <div class="done24" id="done24"></div>
+  <div class="foot hide-tv" id="foot"></div>
+</section>
+
+<section class="view" id="v-historia"><div class="band">
+  <h1 style="font-size:36px">Historia awarii i priorytetów</h1>
+  <div class="filters">
+    <input id="hq" type="search" placeholder="Szukaj: linia, opis, rozwiązanie, nr LDS…">
+    <select id="hl"><option value="">Wszystkie linie</option></select>
+    <select id="hs"><option value="">Otwarte i zamknięte</option><option value="o">Tylko otwarte</option><option value="z">Tylko zamknięte</option></select>
+  </div>
+  <div class="scroll"><table class="stack"><thead><tr><th>Linia</th><th>Priorytet</th><th>Problem</th><th>Status</th><th>Zgłoszono</th><th>Zamknięto</th><th>Czas trwania</th></tr></thead><tbody id="htb"></tbody></table></div>
+</div></section>
+
+<section class="view" id="v-raport"><div class="band">
+  <h1 style="font-size:36px">Raport zmiany</h1>
+  <p class="meta">Raport składa się sam z wpisów na tablicy. Zastępuje ręcznie pisany e-mail na przekazanie zmiany.</p>
+  <div class="seg" id="rsel"></div>
+  <div class="kpis" id="rk"></div>
+  <div class="row" style="margin-bottom:10px"><button class="btn" id="rCopy">Kopiuj raport</button><a class="btn" id="rMail" href="#">Otwórz w poczcie</a></div>
+  <pre class="rep" id="rtxt"></pre>
+</div></section>
+
+<div class="ov" id="drawer" hidden><div class="dr" id="dr"></div></div>
+<div class="ov" id="modal" hidden><div class="dlg" id="dlg"></div></div>
+
+<script>
+{
+/* ===== KONFIGURACJA ===== */
+const CONFIG={
+  SUPABASE_URL:'',        // np. 'https://abcd1234.supabase.co'  (puste = tryb demonstracyjny)
+  SUPABASE_ANON_KEY:'',   // klucz "anon public" z Supabase -> Project Settings -> API
+  LINES:['A30','F08','K40','F15a','C32','N02','N16'],
+  LEADER_PIN:'1234',      // PIN osób uprawnionych do dodawania priorytetów
+  STALE_HOURS:8           // po ilu godzinach bez wpisu karta robi się czerwona
+};
+const PRIO={W:{l:'Wysoki',c:'var(--red)'},S:{l:'Średni',c:'var(--amber)'},N:{l:'Niski',c:'var(--blue)'}};
+const STATUS={nowe:'Nowe',w_trakcie:'W trakcie',czeka_czesc:'Czeka na część',czeka_postoj:'Czeka na postój',rozwiazane:'Rozwiązane'};
+const KIND={utworzenie:'Zgłoszono',komentarz:'Komentarz',zrobione:'Zrobione',do_zrobienia:'Do zrobienia',status:'Zmiana statusu',przejecie:'Przejęto'};
+const ROMAN=['','I','II','III'],HOURS=['','06:00–14:00','14:00–22:00','22:00–06:00'];
+const $=s=>document.querySelector(s);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad=n=>String(n).padStart(2,'0');
+const ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const fdt=s=>{const d=new Date(s);return pad(d.getDate())+'.'+pad(d.getMonth()+1)+' '+pad(d.getHours())+':'+pad(d.getMinutes())};
+const fhm=s=>{const d=new Date(s);return pad(d.getHours())+':'+pad(d.getMinutes())};
+const dur=ms=>{const h=Math.max(0,Math.round(ms/36e5));return h>=24?Math.floor(h/24)+' d '+(h%24)+' h':h+' h'};
+const ls={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+const uid=()=>{try{return crypto.randomUUID()}catch(e){return'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g,()=>(Math.random()*16|0).toString(16))}};
+const iso=t=>new Date(t).toISOString();
+
+function shiftAt(t){const d=new Date(t),h=d.getHours(),s=new Date(d);let n;
+  if(h>=6&&h<14){n=1;s.setHours(6,0,0,0)}else if(h>=14&&h<22){n=2;s.setHours(14,0,0,0)}else{n=3;if(h<6)s.setDate(s.getDate()-1);s.setHours(22,0,0,0)}
+  return{n,start:s,end:new Date(s.getTime()+8*36e5),key:ymd(s)+'-Z'+n,label:ROMAN[n]}}
+const prevShift=s=>shiftAt(s.start.getTime()-6e4);
+
+let DB={issues:[],entries:[]},store,curId=null,view='tablica',rep=0;
+const myName=()=>ls.get('tablica_ur_name')||'';
+let leader=ls.get('tablica_ur_leader')==='1';
+
+/* ===== Dane przykładowe (tryb demo) ===== */
+function seed(){
+  const now=Date.now(),c=shiftAt(now),p1=prevShift(c),p2=prevShift(p1),p3=prevShift(p2);
+  const T=(sh,min)=>Math.min(sh.start.getTime()+min*6e4,now-6e4),D=d=>now-d*864e5;
+  const I=[],E=[];
+  const iss=(o,ents)=>{const id=uid();I.push({id,description:'',lds:'',closed_at:null,...o,created_at:iso(o.created_at)});
+    ents.forEach(([k,t,a,x,st])=>E.push({id:uid(),issue_id:id,kind:k,created_at:iso(t),author:a,text:x||'',status:st||null,shift_key:shiftAt(t).key}))};
+  let t;
+  t=T(p2,60);iss({line:'A30',priority:'W',status:'czeka_czesc',title:'Przekładnia przenośnika – wyciek oleju, nagrzewanie',description:'Wyciek spod uszczelniacza wału, temperatura obudowy ok. 70°C.',lds:'LDS-48213',created_by:'J. Wiśniewski',created_at:t},
+   [['utworzenie',t,'J. Wiśniewski','Wyciek spod uszczelniacza wału, temperatura obudowy ok. 70°C.'],
+    ['zrobione',T(p2,180),'M. Kowalski','Uzupełniono olej, zamówiono uszczelniacz 45x62x8.'],
+    ['do_zrobienia',T(p2,185),'M. Kowalski','Wymiana uszczelniacza po dostawie, kontrola temperatury co 2 h.'],
+    ['przejecie',T(p1,20),'P. Nowak'],
+    ['komentarz',T(p1,240),'P. Nowak','Temperatura 66–68°C, stabilna. Część ma dojechać jutro rano.','czeka_czesc']]);
+  t=T(p1,120);iss({line:'F08',priority:'W',status:'w_trakcie',title:'Zgrzewarka – błąd E-214, częste zatrzymania',lds:'LDS-48230',created_by:'K. Mazur',created_at:t},
+   [['utworzenie',t,'K. Mazur','Linia staje co ok. 20 min, błąd E-214.'],
+    ['zrobione',T(p1,300),'P. Nowak','Wyczyszczono elektrody, reset sterownika – bez poprawy.'],
+    ['do_zrobienia',T(p1,310),'P. Nowak','Sprawdzić czujnik temperatury głowicy.'],
+    ['przejecie',T(c,15),'A. Zielińska'],
+    ['komentarz',T(c,50),'A. Zielińska','Wymieniam czujnik temperatury głowicy, linia zatrzymana ok. 1 h.','w_trakcie']]);
+  t=T(p3,200);iss({line:'K40',priority:'S',status:'nowe',title:'Robot pick&place gubi detale na stacji 3',created_by:'J. Wiśniewski',created_at:t},
+   [['utworzenie',t,'J. Wiśniewski','Kilka detali na zmianę spada z chwytaka przy odkładaniu.'],
+    ['przejecie',T(p2,30),'M. Kowalski']]);
+  t=T(p1,300);iss({line:'C32',priority:'S',status:'w_trakcie',title:'Wkrętarka nr 2 – niedokręcone śruby, odrzuty na wizji',lds:'LDS-48241',created_by:'K. Mazur',created_at:t},
+   [['utworzenie',t,'K. Mazur','Wzrost odrzutów na stacji wizyjnej.'],
+    ['zrobione',T(p1,400),'P. Nowak','Wymieniono końcówkę, kalibracja momentu 1,2 Nm.'],
+    ['do_zrobienia',T(p1,405),'P. Nowak','Obserwować odrzuty do końca kolejnej zmiany.']]);
+  t=T(p1,70);iss({line:'N16',priority:'N',status:'nowe',title:'Migające oświetlenie stanowiska montażu',created_by:'K. Mazur',created_at:t},[['utworzenie',t,'K. Mazur','']]);
+  t=T(c,30);iss({line:'F15a',priority:'N',status:'w_trakcie',title:'Osłona bezpieczeństwa – luźny zawias',created_by:'J. Wiśniewski',created_at:t},
+   [['utworzenie',t,'J. Wiśniewski',''],['zrobione',Math.min(t+40*6e4,now-6e4),'A. Zielińska','Dokręcono zawias, do wymiany przy najbliższym postoju.']]);
+  // zamknięte - historia
+  t=T(p2,240);iss({line:'N02',priority:'W',status:'rozwiazane',title:'Prasa – awaria zaworu hydraulicznego',lds:'LDS-48220',created_by:'K. Mazur',created_at:t,closed_at:iso(T(p1,200))},
+   [['utworzenie',t,'K. Mazur','Prasa nie dochodzi do pozycji, spadek ciśnienia.'],['zrobione',T(p1,190),'P. Nowak','Wymiana zaworu proporcjonalnego, odpowietrzenie układu, test 30 min OK.','rozwiazane']]);
+  t=D(30);iss({line:'F08',priority:'W',status:'rozwiazane',title:'Zgrzewarka – błąd E-214',created_by:'K. Mazur',created_at:t,closed_at:iso(t+9*36e5)},
+   [['utworzenie',t,'K. Mazur','Błąd E-214, zatrzymania.'],['zrobione',t+8*36e5,'M. Kowalski','Wymieniono czujnik temperatury głowicy – problem ustąpił.','rozwiazane']]);
+  t=D(9);iss({line:'K40',priority:'S',status:'rozwiazane',title:'Robot – detale spadają z chwytaka',created_by:'J. Wiśniewski',created_at:t,closed_at:iso(t+20*36e5)},
+   [['utworzenie',t,'J. Wiśniewski','Detale spadają przy odkładaniu.'],['zrobione',t+19*36e5,'A. Zielińska','Wymieniono przyssawki chwytaka i filtr podciśnienia, podciśnienie wróciło do normy.','rozwiazane']]);
+  t=D(19);iss({line:'A30',priority:'W',status:'rozwiazane',title:'Przenośnik – zerwany pas',created_by:'K. Mazur',created_at:t,closed_at:iso(t+5*36e5)},
+   [['utworzenie',t,'K. Mazur',''],['zrobione',t+5*36e5,'P. Nowak','Wymieniono pas 1200 mm, naciąg wg instrukcji, test OK.','rozwiazane']]);
+  DB={issues:I,entries:E};
+}
+
+/* ===== Magazyn danych: demo (przeglądarka) albo Supabase ===== */
+const LSKEY='tablica_ur_demo_v1';
+const demo={
+  async init(){const raw=ls.get(LSKEY);if(raw){try{DB=JSON.parse(raw)}catch(e){seed()}}else{seed();this.save()}
+    addEventListener('storage',e=>{if(e.key===LSKEY&&e.newValue){try{DB=JSON.parse(e.newValue);render()}catch(_){}}})},
+  save(){ls.set(LSKEY,JSON.stringify(DB))},
+  async addIssue(o){DB.issues.push(o);this.save()},
+  async updIssue(id,p){Object.assign(DB.issues.find(i=>i.id===id),p);this.save()},
+  async addEntry(e){DB.entries.push(e);this.save()}
+};
+const loadScript=src=>new Promise((ok,no)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=no;document.head.appendChild(s)});
+const remote={
+  sb:null,t:0,
+  async init(){
+    await loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js');
+    this.sb=window.supabase.createClient(CONFIG.SUPABASE_URL,CONFIG.SUPABASE_ANON_KEY);
+    const {data}=await this.sb.auth.getSession();
+    if(!data.session)await loginDialog(this.sb);
+    await this.reload();
+    this.sb.channel('tablica').on('postgres_changes',{event:'*',schema:'public',table:'issues'},()=>this.soon())
+      .on('postgres_changes',{event:'*',schema:'public',table:'entries'},()=>this.soon()).subscribe();
+    setInterval(()=>this.soon(),5*6e4);
+  },
+  soon(){clearTimeout(this.t);this.t=setTimeout(()=>this.reload().then(render),400)},
+  async reload(){const [a,b]=await Promise.all([this.sb.from('issues').select('*'),this.sb.from('entries').select('*').order('created_at')]);
+    if(a.error||b.error){toast('Brak połączenia z bazą – spróbuję ponownie');return}DB={issues:a.data,entries:b.data}},
+  async addIssue(o){const r=await this.sb.from('issues').insert(o);if(r.error)throw r.error},
+  async updIssue(id,p){const r=await this.sb.from('issues').update(p).eq('id',id);if(r.error)throw r.error},
+  async addEntry(e){const r=await this.sb.from('entries').insert(e);if(r.error)throw r.error}
+};
+function loginDialog(sb){return new Promise(ok=>{
+  modal(`<h2>Logowanie</h2><p class="meta">Wspólne konto działu UR.</p>
+  <form id="lf" class="box"><label class="fl">E-mail<input name="e" type="email" required autocomplete="username"></label>
+  <label class="fl">Hasło<input name="p" type="password" required autocomplete="current-password"></label>
+  <p class="hint" id="lerr"></p><button class="btn red">Zaloguj</button></form>`,true);
+  $('#lf').onsubmit=async ev=>{ev.preventDefault();const f=ev.target;
+    const {error}=await sb.auth.signInWithPassword({email:f.e.value,password:f.p.value});
+    if(error){$('#lerr').textContent='Nie udało się zalogować: '+error.message;return}closeModal();ok()}})}
+
+/* ===== Logika zmian ===== */
+function info(i,cur){
+  const es=DB.entries.filter(e=>e.issue_id===i.id).sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+  const open=i.status!=='rozwiazane';
+  const ackBy=es.find(e=>e.kind==='przejecie'&&e.shift_key===cur.key);
+  const acked=new Date(i.created_at)>=cur.start||!!ackBy;
+  const acts=es.filter(e=>e.kind!=='przejecie'),last=acts[acts.length-1];
+  const idle=last?(Date.now()-new Date(last.created_at))/36e5:0;
+  const todo=[...es].reverse().find(e=>e.kind==='do_zrobienia');
+  return{es,open,ackBy,needsAck:open&&!acked,stale:open&&idle>=CONFIG.STALE_HOURS,idle,last,todo};
+}
+
+/* ===== Tablica ===== */
+function card(i,v,cur){
+  const f=[];
+  if(v.stale)f.push(`<span class="flag r">Brak działań od ${Math.floor(v.idle)} h</span>`);
+  if(v.needsAck)f.push(`<span class="flag a">Czeka na przejęcie – zmiana ${cur.label}</span>`);
+  else if(v.ackBy)f.push(`<span class="flag g">Przejął: ${esc(v.ackBy.author)}</span>`);
+  const L=v.last&&v.last.kind!=='utworzenie'&&v.last.text?`<span class="last"><b>${esc(KIND[v.last.kind])}</b> · zm. ${shiftAt(v.last.created_at).label}, ${fhm(v.last.created_at)} · ${esc(v.last.author)}: ${esc(v.last.text)}</span>`:'';
+  const T=v.todo&&v.todo!==v.last?`<span class="todo"><b>Do zrobienia:</b> ${esc(v.todo.text)}</span>`:(v.todo?`<span class="todo"><b>Do zrobienia</b> (${esc(v.todo.author)}): ${esc(v.todo.text)}</span>`:'');
+  return`<button class="card${v.stale?' alarm':''}${v.needsAck?' wait':''}" style="--c:${PRIO[i.priority]?.c||'var(--mute)'}" data-id="${esc(i.id)}">
+  <span class="h"><span class="ln">${esc(i.line)}</span><span class="ttl">${esc(i.title)}</span></span>
+  <span class="row"><span class="chip st-${esc(i.status)}">${esc(STATUS[i.status]||i.status)}</span>${i.lds?`<span class="chip">${esc(i.lds)}</span>`:''}<span class="meta">od ${fdt(i.created_at)} · ${dur(Date.now()-new Date(i.created_at))}</span></span>
+  ${v.last===v.todo?'':L}${T}${f.length?`<span class="row">${f.join('')}</span>`:''}</button>`;
+}
+function renderBoard(){
+  const cur=shiftAt(Date.now());
+  const open=DB.issues.filter(i=>i.status!=='rozwiazane').map(i=>({i,v:info(i,cur)}));
+  const nA=open.filter(x=>x.v.needsAck).length,nS=open.filter(x=>x.v.stale).length;
+  $('#alerts').innerHTML=`<span class="pill"><b>${open.length}</b> otwartych priorytetów</span>`+
+    (nA?`<span class="pill a"><b>${nA}</b> czeka na przejęcie przez zmianę ${cur.label}</span>`:`<span class="pill g">Wszystkie priorytety przejęte przez zmianę ${cur.label}</span>`)+
+    (nS?`<span class="pill r"><b>${nS}</b> bez działań od ponad ${CONFIG.STALE_HOURS} h</span>`:'');
+  $('#board').innerHTML=['W','S','N'].map(k=>{
+    const xs=open.filter(x=>x.i.priority===k).sort((a,b)=>(b.v.stale+b.v.needsAck)-(a.v.stale+a.v.needsAck)||new Date(a.i.created_at)-new Date(b.i.created_at));
+    return`<div class="col"><div class="colh" style="--c:${PRIO[k].c}">${PRIO[k].l}<small>${xs.length}</small></div>${xs.length?xs.map(x=>card(x.i,x.v,cur)).join(''):'<div class="empty">Brak</div>'}</div>`}).join('');
+  const d24=DB.issues.filter(i=>i.status==='rozwiazane'&&i.closed_at&&Date.now()-new Date(i.closed_at)<864e5);
+  $('#done24').innerHTML=d24.length?`<h3>Rozwiązane w ostatnich 24 h</h3>`+d24.map(i=>`<button data-id="${esc(i.id)}"><span class="pill g"><b>${esc(i.line)}</b> ${esc(i.title)}</span></button>`).join(''):'';
+  $('#foot').innerHTML=store===demo?`<span>Tryb demonstracyjny – przykładowe dane, zapisywane tylko w tej przeglądarce.</span><button class="btn" id="bReset">Przywróć dane przykładowe</button>`:'';
+  const r=$('#bReset');if(r)r.onclick=()=>{seed();demo.save();render();toast('Przywrócono dane przykładowe')};
+}
+
+/* ===== Szczegóły awarii ===== */
+const words=s=>new Set(String(s).toLowerCase().replace(/ł/g,'l').normalize('NFD').replace(/[̀-ͯ]/g,'').split(/[^a-z0-9]+/).filter(w=>w.length>=4||(/\d/.test(w)&&w.length>=2)));
+function similar(i){
+  const W=words(i.title+' '+i.description);
+  return DB.issues.filter(o=>o.id!==i.id&&o.status==='rozwiazane').map(o=>{
+    const ow=words(o.title+' '+o.description);let s=o.line===i.line?2:0;W.forEach(w=>{if(ow.has(w))s++});return{o,s}})
+    .filter(x=>x.s>=3).sort((a,b)=>b.s-a.s).slice(0,3);
+}
+const micSvg='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
+const voice=(name,ph,req)=>`<div class="voice"><textarea name="${name}" placeholder="${ph}"${req?' required':''}></textarea><button type="button" class="mic" aria-label="Notatka głosowa">${micSvg}</button><p class="hint"></p></div>`;
+const nameField=()=>`<label class="fl">Twoje imię i nazwisko<input name="who" required value="${esc(myName())}" autocomplete="name"></label>`;
+
+function renderDrawer(){
+  const i=DB.issues.find(x=>x.id===curId);if(!i){closeDrawer();return}
+  const cur=shiftAt(Date.now()),v=info(i,cur),sim=similar(i);
+  $('#dr').innerHTML=`<button class="btn x" data-close>Zamknij</button>
+  <div class="dhead" style="--c:${PRIO[i.priority]?.c}">
+    <div class="row"><span class="ln">${esc(i.line)}</span><span class="chip">Priorytet: ${esc(PRIO[i.priority]?.l)}</span><span class="chip st-${esc(i.status)}">${esc(STATUS[i.status])}</span>${i.lds?`<span class="chip">${esc(i.lds)}</span>`:''}</div>
+    <h2>${esc(i.title)}</h2>${i.description?`<p style="margin:0">${esc(i.description)}</p>`:''}
+    <span class="meta">Zgłosił: ${esc(i.created_by)} · ${fdt(i.created_at)}${i.closed_at?' · zamknięto '+fdt(i.closed_at):''}</span></div>
+  ${v.needsAck?`<form class="box warn" id="fAck"><h3>Priorytet nie jest jeszcze przejęty przez zmianę ${cur.label}</h3>${nameField()}<button class="btn red">Przejmuję na mojej zmianie</button></form>`:''}
+  <form class="box" id="fEntry"><h3>Dodaj wpis</h3>
+    <div class="seg">${['komentarz','zrobione','do_zrobienia'].map((k,n)=>`<label><input type="radio" name="kind" value="${k}"${n?'':' checked'}><span>${KIND[k]}</span></label>`).join('')}</div>
+    ${voice('text','Co zostało zrobione, co dalej, jakie części…',false)}
+    <label class="fl">Status<select name="status">${Object.entries(STATUS).map(([k,l])=>`<option value="${k}"${k===i.status?' selected':''}>${l}</option>`).join('')}</select></label>
+    ${nameField()}<button class="btn green">Zapisz wpis</button></form>
+  ${sim.length?`<div class="box"><h3>Podobne przypadki z historii</h3>${sim.map(({o})=>{const z=DB.entries.filter(e=>e.issue_id===o.id&&e.kind==='zrobione').map(e=>e.text).join(' ');
+    return`<div class="sim"><b>${esc(o.line)} · ${esc(o.title)}</b> <span class="meta">(${fdt(o.created_at).slice(0,5)})</span><br>Rozwiązanie: ${esc(z||'brak opisu')}</div>`}).join('')}</div>`:''}
+  <div class="box"><h3>Historia wpisów</h3><ul class="tl">${[...v.es].reverse().map(e=>`<li class="${esc(e.kind)}"><span class="meta">Zm. ${shiftAt(e.created_at).label} · ${fdt(e.created_at)} · ${esc(e.author)}</span><br>
+    <span class="k">${esc(KIND[e.kind]||e.kind)}</span>${e.status?` <span class="chip st-${esc(e.status)}">${esc(STATUS[e.status])}</span>`:''}${e.text?' – '+esc(e.text):''}</li>`).join('')}</ul></div>`;
+  bindVoice($('#dr'));
+  const fa=$('#fAck');if(fa)fa.onsubmit=async ev=>{ev.preventDefault();const who=ev.target.who.value.trim();if(!who)return;ls.set('tablica_ur_name',who);
+    await run(()=>store.addEntry({id:uid(),issue_id:i.id,kind:'przejecie',author:who,text:'',status:null,shift_key:cur.key,created_at:iso(Date.now())}),'Priorytet przejęty')};
+  $('#fEntry').onsubmit=async ev=>{ev.preventDefault();const f=ev.target,who=f.who.value.trim(),text=f.text.value.trim(),st=f.status.value,ch=st!==i.status;
+    if(!text&&!ch){toast('Wpisz treść albo zmień status');return}ls.set('tablica_ur_name',who);stopRec();
+    await run(async()=>{const now=Date.now();
+      await store.addEntry({id:uid(),issue_id:i.id,kind:text?f.kind.value:'status',author:who,text,status:ch?st:null,shift_key:shiftAt(now).key,created_at:iso(now)});
+      if(ch)await store.updIssue(i.id,{status:st,closed_at:st==='rozwiazane'?iso(now):null});},'Zapisano wpis')};
+}
+function openIssue(id){curId=id;$('#drawer').hidden=false;renderDrawer()}
+function closeDrawer(){stopRec();curId=null;$('#drawer').hidden=true}
+
+/* ===== Nowy priorytet ===== */
+function newIssue(){
+  if(!leader){modal(`<h2>Dodawanie priorytetów</h2><p class="meta">Priorytety dodają osoby wyznaczone. Podaj PIN.</p>
+    <form id="fp" class="box"><label class="fl">PIN<input name="pin" type="password" inputmode="numeric" required></label><p class="hint" id="perr"></p><button class="btn red">Dalej</button></form>`);
+    $('#fp').onsubmit=ev=>{ev.preventDefault();if(ev.target.pin.value===CONFIG.LEADER_PIN){leader=true;ls.set('tablica_ur_leader','1');newIssue()}else $('#perr').textContent='Nieprawidłowy PIN.'};return}
+  modal(`<h2>Nowy priorytet</h2><form id="fn" class="box">
+    <label class="fl">Linia<select name="line" required>${CONFIG.LINES.map(l=>`<option>${esc(l)}</option>`).join('')}</select></label>
+    <div class="fl">Priorytet<div class="seg">${Object.entries(PRIO).map(([k,p],n)=>`<label><input type="radio" name="prio" value="${k}"${n?'':' checked'}><span>${p.l}</span></label>`).join('')}</div></div>
+    <label class="fl">Problem (krótko)<input name="title" required maxlength="120" placeholder="np. Zgrzewarka – błąd E-214"></label>
+    <div class="fl">Opis${voice('desc','Objawy, co już wiadomo, czego pilnować…',false)}</div>
+    <label class="fl">Nr zgłoszenia w LDS (opcjonalnie)<input name="lds" placeholder="np. LDS-48250"></label>
+    ${nameField()}<button class="btn red">Dodaj na tablicę</button></form>`);
+  $('#fn').onsubmit=async ev=>{ev.preventDefault();const f=ev.target,who=f.who.value.trim(),now=Date.now(),id=uid();ls.set('tablica_ur_name',who);stopRec();
+    await run(async()=>{await store.addIssue({id,line:f.line.value,priority:f.prio.value,status:'nowe',title:f.title.value.trim(),description:f.desc.value.trim(),lds:f.lds.value.trim(),created_by:who,created_at:iso(now),closed_at:null});
+      await store.addEntry({id:uid(),issue_id:id,kind:'utworzenie',author:who,text:f.desc.value.trim(),status:null,shift_key:shiftAt(now).key,created_at:iso(now)});closeModal()},'Dodano priorytet')};
+}
+
+/* ===== Historia ===== */
+function renderHist(){
+  const q=$('#hq').value.toLowerCase(),l=$('#hl').value,s=$('#hs').value;
+  const rows=DB.issues.filter(i=>{if(l&&i.line!==l)return false;if(s==='o'&&i.status==='rozwiazane')return false;if(s==='z'&&i.status!=='rozwiazane')return false;
+    if(!q)return true;const txt=[i.line,i.title,i.description,i.lds,i.created_by,...DB.entries.filter(e=>e.issue_id===i.id).map(e=>e.text+' '+e.author)].join(' ').toLowerCase();return txt.includes(q)})
+    .sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+  $('#htb').innerHTML=rows.length?rows.map(i=>`<tr data-id="${esc(i.id)}"><td><b>${esc(i.line)}</b></td><td>${esc(PRIO[i.priority]?.l)}</td><td>${esc(i.title)}${i.lds?` <span class="meta">${esc(i.lds)}</span>`:''}</td>
+    <td><span class="chip st-${esc(i.status)}">${esc(STATUS[i.status])}</span></td><td class="num">${fdt(i.created_at)}</td><td class="num">${i.closed_at?fdt(i.closed_at):''}</td>
+    <td class="num">${dur((i.closed_at?new Date(i.closed_at):Date.now())-new Date(i.created_at))}</td></tr>`).join(''):'<tr><td colspan="7">Nic nie znaleziono.</td></tr>';
+}
+
+/* ===== Raport zmiany ===== */
+function report(s){
+  const inS=t=>{t=new Date(t);return t>=s.start&&t<s.end};
+  const act=DB.issues.filter(i=>new Date(i.created_at)<s.end&&(!i.closed_at||new Date(i.closed_at)>=s.start))
+    .sort((a,b)=>'WSN'.indexOf(a.priority)-'WSN'.indexOf(b.priority));
+  let withAct=0,noAct=0;const out=[];
+  out.push(`RAPORT ZMIANY ${s.label} – ${pad(s.start.getDate())}.${pad(s.start.getMonth()+1)}.${s.start.getFullYear()}, ${HOURS[s.n]}`,'');
+  out.push('PRIORYTETY');
+  act.forEach(i=>{const es=DB.entries.filter(e=>e.issue_id===i.id&&inS(e.created_at)).sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+    const ack=es.find(e=>e.kind==='przejecie'),work=es.filter(e=>e.kind!=='przejecie'&&e.kind!=='utworzenie');
+    work.length?withAct++:noAct++;
+    out.push('',`[${(PRIO[i.priority]?.l||'').toUpperCase()}] ${i.line} – ${i.title}${i.lds?' ('+i.lds+')':''}`);
+    out.push(`  Status: ${STATUS[i.status]}${inS(i.created_at)?' · NOWE na tej zmianie':''}${ack?' · przejął: '+ack.author:''}`);
+    work.forEach(e=>out.push(`  - ${fhm(e.created_at)} ${KIND[e.kind]} (${e.author})${e.status?' → '+STATUS[e.status]:''}${e.text?': '+e.text:''}`));
+    if(!work.length)out.push('  ! BRAK DZIAŁAŃ NA TEJ ZMIANIE');});
+  const closed=act.filter(i=>i.closed_at&&inS(i.closed_at));
+  out.push('','ZAMKNIĘTE NA ZMIANIE: '+(closed.length?closed.map(i=>i.line+' – '+i.title).join('; '):'brak'));
+  return{txt:out.join('\n'),k:[[act.length,'aktywnych priorytetów',''],[withAct,'z działaniami','g'],[noAct,'bez działań','r'],[closed.length,'zamkniętych','g']]};
+}
+function renderRep(){
+  const c=shiftAt(Date.now()),list=[c,prevShift(c),prevShift(prevShift(c))];
+  $('#rsel').innerHTML=list.map((s,n)=>`<label><input type="radio" name="rs" value="${n}"${n===rep?' checked':''}><span>${n?'':'Bieżąca: '}Zm. ${s.label} · ${pad(s.start.getDate())}.${pad(s.start.getMonth()+1)}</span></label>`).join('');
+  $('#rsel').onchange=e=>{rep=+e.target.value;renderRep()};
+  const r=report(list[rep]);
+  $('#rk').innerHTML=r.k.map(([n,l,c])=>`<div class="kpi ${c}"><b>${n}</b><span>${l}</span></div>`).join('');
+  $('#rtxt').textContent=r.txt;
+  $('#rMail').href='mailto:?subject='+encodeURIComponent(r.txt.split('\n')[0])+'&body='+encodeURIComponent(r.txt);
+}
+
+/* ===== Notatki głosowe ===== */
+let rec=null;
+function stopRec(){if(rec){try{rec.stop()}catch(e){}}}
+function bindVoice(root){root.querySelectorAll('.mic').forEach(btn=>{const ta=btn.parentNode.querySelector('textarea'),hint=btn.parentNode.querySelector('.hint');
+  btn.onclick=()=>{if(rec){stopRec();return}
+    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR){hint.textContent='Ta przeglądarka nie rozpoznaje mowy. Użyj Chrome albo mikrofonu na klawiaturze telefonu.';return}
+    let r;try{r=new SR()}catch(e){hint.textContent='Nie można uruchomić rozpoznawania mowy.';return}
+    r.lang='pl-PL';r.continuous=true;r.interimResults=true;
+    const base=ta.value?ta.value.replace(/\s*$/,' '):'';let fin='';
+    r.onresult=e=>{let tmp='';for(let k=e.resultIndex;k<e.results.length;k++){const x=e.results[k];if(x.isFinal)fin+=x[0].transcript.trim()+' ';else tmp+=x[0].transcript}ta.value=base+fin+tmp};
+    r.onerror=e=>{hint.textContent=(e.error==='not-allowed'||e.error==='service-not-allowed')?'Brak dostępu do mikrofonu. W podglądzie Claude mikrofon jest zablokowany – zadziała w aplikacji otwartej z własnego linku.':'Błąd rozpoznawania mowy ('+e.error+').'};
+    r.onend=()=>{rec=null;btn.classList.remove('rec');ta.value=ta.value.trim()};
+    try{r.start();rec=r;btn.classList.add('rec');hint.textContent='Słucham… kliknij ponownie, aby zakończyć.'}catch(e){hint.textContent='Nie można uruchomić mikrofonu.'}}})}
+
+/* ===== Wspólne ===== */
+function modal(html,locked){$('#dlg').innerHTML=(locked?'':'<button class="btn x" data-close>Zamknij</button>')+html;$('#modal').hidden=false;$('#modal').dataset.locked=locked?'1':'';bindVoice($('#dlg'));const f=$('#dlg input:not([type=radio]),#dlg select');if(f)f.focus()}
+function closeModal(){stopRec();$('#modal').hidden=true}
+let tt=0;function toast(m){let t=$('.toast');if(!t){t=document.createElement('div');t.className='toast';t.setAttribute('role','status');document.body.appendChild(t)}t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,2600)}
+async function run(fn,ok){try{await fn();if(store===remote)await remote.reload();render();if(curId&&!$('#drawer').hidden)renderDrawer();toast(ok)}catch(e){toast('Nie zapisano: '+(e.message||e))}}
+function render(){
+  $('#bWho').textContent=myName()?'Ty: '+myName():'Podaj nazwisko';
+  if(view==='tablica')renderBoard();if(view==='historia')renderHist();if(view==='raport')renderRep();
+  if(curId&&!$('#drawer').hidden&&!document.activeElement?.closest('#dr form'))renderDrawer();
+}
+function route(){
+  if(!$('#drawer').hidden)closeDrawer();
+  const h=location.hash.slice(1)||'tablica',tv=h==='tv';
+  view=['historia','raport'].includes(h)?h:'tablica';
+  document.body.classList.toggle('tv',tv);
+  document.querySelectorAll('.view').forEach(s=>s.classList.toggle('on',s.id==='v-'+view));
+  document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.dataset.v===view));
+  render();
+}
+function tick(){const now=new Date(),c=shiftAt(now);$('#clock').textContent=pad(now.getHours())+':'+pad(now.getMinutes());$('#shN').textContent=c.label;$('#shH').textContent=HOURS[c.n]}
+
+document.addEventListener('click',e=>{
+  const id=e.target.closest('[data-id]');if(id&&!e.target.closest('#dr')){openIssue(id.dataset.id);return}
+  if(e.target.closest('[data-close]')){if(e.target.closest('#dr'))closeDrawer();else closeModal();return}
+  if(e.target.id==='drawer')closeDrawer();
+  if(e.target.id==='modal'&&!$('#modal').dataset.locked)closeModal();
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!$('#modal').hidden&&!$('#modal').dataset.locked)closeModal();else if(!$('#drawer').hidden)closeDrawer()}});
+$('#bNew').onclick=newIssue;
+$('#bTv').onclick=()=>{location.hash='tv';const p=document.documentElement.requestFullscreen?.();if(p)p.catch(()=>{})};
+$('#bTvExit').onclick=()=>{location.hash='tablica';if(document.fullscreenElement)document.exitFullscreen().catch(()=>{})};
+$('#bWho').onclick=()=>{modal(`<h2>Kto pracuje na tym urządzeniu?</h2><form id="fw" class="box">${nameField()}<button class="btn red">Zapisz</button></form>`);
+  $('#fw').onsubmit=ev=>{ev.preventDefault();ls.set('tablica_ur_name',ev.target.who.value.trim());closeModal();render()}};
+CONFIG.LINES.forEach(l=>{const o=document.createElement('option');o.textContent=l;$('#hl').appendChild(o)});
+['#hq','#hl','#hs'].forEach(s=>$(s).addEventListener('input',renderHist));
+addEventListener('hashchange',route);
+$('#rCopy').onclick=async()=>{try{await navigator.clipboard.writeText($('#rtxt').textContent);toast('Skopiowano raport')}catch(e){toast('Zaznacz tekst raportu i skopiuj ręcznie')}};
+
+(async()=>{
+  tick();setInterval(tick,1000);
+  store=CONFIG.SUPABASE_URL&&CONFIG.SUPABASE_ANON_KEY?remote:demo;
+  try{await store.init()}catch(e){toast('Błąd uruchamiania: '+(e.message||e))}
+  route();
+  setInterval(()=>{if(view==='tablica')renderBoard()},60e3);
+})();
+}
+</script>
+</body>
+</html>
